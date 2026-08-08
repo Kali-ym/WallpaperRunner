@@ -20,9 +20,11 @@ function broadcastTasks(): void {
 }
 
 async function applyNetwork(proxyUrl: string): Promise<void> {
+  // Chromium net.fetch hits net::ERR_BLOCKED_BY_CLIENT on img CDN;
+  // use curl (+ system proxy) which already works for this site.
+  setHttpFetch(null)
+  setPreferCurl(process.platform === 'win32')
   setHttpProxy(proxyUrl || null)
-  setPreferCurl(false)
-  setHttpFetch((input, init) => net.fetch(String(input), init))
   if (proxyUrl) {
     await session.defaultSession.setProxy({
       proxyRules: proxyUrl,
@@ -88,8 +90,8 @@ export function registerIpc(): void {
     return settings.downloadRoot
   })
 
-  ipcMain.handle('library:list', async (_e, query?: string) => {
-    return store.search(query ?? '')
+  ipcMain.handle('library:list', async (_e, query?: string, favoriteOnly?: boolean) => {
+    return store.search(query ?? '', { favoriteOnly: Boolean(favoriteOnly) })
   })
 
   ipcMain.handle('library:get', async (_e, source: string, id: string) => {
@@ -100,8 +102,71 @@ export function registerIpc(): void {
     return store.rebuildIndex()
   })
 
-  ipcMain.handle('queue:enqueue', async (_e, urls: string[]) => {
-    const tasks = queue.enqueue(urls)
+  ipcMain.handle('library:delete', async (_e, source: string, id: string) => {
+    await store.deleteGallery(source, id)
+  })
+
+  ipcMain.handle(
+    'library:deleteMany',
+    async (_e, refs: Array<{ source: string; galleryId: string }>) => {
+      return store.deleteGalleries(refs)
+    },
+  )
+
+  ipcMain.handle(
+    'library:rename',
+    async (_e, source: string, id: string, displayTitle: string) => {
+      return store.renameGallery(source, id, displayTitle)
+    },
+  )
+
+  ipcMain.handle(
+    'library:setFavorite',
+    async (_e, source: string, id: string, favorite: boolean) => {
+      return store.setFavorite(source, id, favorite)
+    },
+  )
+
+  ipcMain.handle(
+    'library:setFavorites',
+    async (_e, refs: Array<{ source: string; galleryId: string }>, favorite: boolean) => {
+      return store.setFavorites(refs, favorite)
+    },
+  )
+
+  ipcMain.handle('library:openFolder', async (_e, source: string, id: string) => {
+    const { shell } = await import('electron')
+    const path = await store.openGalleryPath(source, id)
+    await shell.openPath(path)
+    return path
+  })
+
+  ipcMain.handle('library:cleanupEmpty', async () => {
+    return store.cleanupEmptyGalleries()
+  })
+
+  ipcMain.handle(
+    'library:deleteImages',
+    async (_e, source: string, id: string, paths: string[]) => {
+      return store.deleteImages(source, id, paths)
+    },
+  )
+
+  ipcMain.handle(
+    'library:setCover',
+    async (_e, source: string, id: string, relativePath: string) => {
+      return store.setCover(source, id, relativePath)
+    },
+  )
+
+  ipcMain.handle('library:redownload', async (_e, sourceUrl: string) => {
+    const tasks = queue.enqueue([sourceUrl], { overwrite: true })
+    broadcastTasks()
+    return tasks
+  })
+
+  ipcMain.handle('queue:enqueue', async (_e, urls: string[], overwrite?: boolean) => {
+    const tasks = queue.enqueue(urls, { overwrite: Boolean(overwrite) })
     broadcastTasks()
     return tasks
   })

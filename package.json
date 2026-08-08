@@ -21,7 +21,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^34.5.8",
+    "electron": "^43.3.0",
     "electron-vite": "^3.0.0",
     "tsx": "^4.23.11",
     "typescript": "^5.8.2",

@@ -15,6 +15,10 @@ export interface XchinaPageParse {
 
 const BG_URL_RE = /background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i
 
+/** Hosts / path prefixes that are not gallery photos. */
+const EXCLUDE_RE =
+  /upload\.xchina\.io|\/images\/sites\/|googletagmanager|google-analytics|doubleclick|adservice|\/ads?\/|favicon/i
+
 /** Convert CDN thumb URL to full-size original. */
 export function upgradeThumbToOriginal(url: string): string {
   return url
@@ -25,10 +29,29 @@ export function upgradeThumbToOriginal(url: string): string {
     .replace(/_small(\.[a-z]+)$/i, '$1')
 }
 
+export function isExcludedAssetUrl(url: string): boolean {
+  return EXCLUDE_RE.test(url)
+}
+
 function extractBgUrl(style: string | undefined): string | null {
   if (!style) return null
   const m = style.match(BG_URL_RE)
   return m?.[1] ?? null
+}
+
+function pushImage(
+  images: XchinaPageImage[],
+  seen: Set<string>,
+  thumb: string | null,
+): void {
+  if (!thumb) return
+  if (isExcludedAssetUrl(thumb)) return
+  if (!/^https?:\/\//i.test(thumb)) return
+
+  const originalCandidate = upgradeThumbToOriginal(thumb)
+  if (seen.has(originalCandidate)) return
+  seen.add(originalCandidate)
+  images.push({ thumbOrLink: thumb, originalCandidate })
 }
 
 export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse {
@@ -64,26 +87,18 @@ export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse 
 
   $('.list.photo-items .item.photo-image').each((_, el) => {
     const imgDiv = $(el).find('.img[style], div.img').first()
-    const thumb = extractBgUrl(imgDiv.attr('style'))
-    if (!thumb) return
-    // photos / photos2 / photos3 ...
-    if (!/\/photos\d*\//i.test(thumb)) return
-
-    const originalCandidate = upgradeThumbToOriginal(thumb)
-    if (seen.has(originalCandidate)) return
-    seen.add(originalCandidate)
-    images.push({ thumbOrLink: thumb, originalCandidate })
+    const fromBg = extractBgUrl(imgDiv.attr('style'))
+    if (fromBg) {
+      pushImage(images, seen, fromBg)
+      return
+    }
+    const img = $(el).find('img').first()
+    pushImage(images, seen, img.attr('data-src') || img.attr('src') || null)
   })
 
-  // Fallback: any photo CDN background in photo-items area
   if (images.length === 0) {
     $('.list.photo-items [style*="background-image"]').each((_, el) => {
-      const thumb = extractBgUrl($(el).attr('style'))
-      if (!thumb || !/\/photos\d*\//i.test(thumb)) return
-      const originalCandidate = upgradeThumbToOriginal(thumb)
-      if (seen.has(originalCandidate)) return
-      seen.add(originalCandidate)
-      images.push({ thumbOrLink: thumb, originalCandidate })
+      pushImage(images, seen, extractBgUrl($(el).attr('style')))
     })
   }
 

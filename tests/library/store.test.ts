@@ -37,7 +37,16 @@ describe('LibraryStore', () => {
     const meta = await store.getGallery('xchina', 'abc')
     expect(meta?.images).toEqual(['001.jpg', '002.jpg'])
 
+    await store.renameGallery('xchina', 'abc', '显示名')
+    await store.setFavorite('xchina', 'abc', true)
+    const renamed = await store.getGallery('xchina', 'abc')
+    expect(renamed?.displayTitle).toBe('显示名')
+    expect(renamed?.favorite).toBe(true)
+    const favOnly = await store.search('', { favoriteOnly: true })
+    expect(favOnly).toHaveLength(1)
+
     const rebuilt = await store.rebuildIndex()
     expect(rebuilt).toHaveLength(1)
+    expect(rebuilt[0].favorite).toBe(true)
   })
 })

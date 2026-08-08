@@ -18,7 +18,6 @@ let preferCurl = process.platform === 'win32'
 
 export function setHttpProxy(url: string | null | undefined): void {
   const next = (url ?? '').trim() || null
-  if (next === proxyUrl) return
   proxyUrl = next
   agent = next ? new ProxyAgent(next) : undefined
 }

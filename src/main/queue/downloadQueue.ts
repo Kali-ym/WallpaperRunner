@@ -13,8 +13,12 @@ export interface DownloadQueueOptions {
 
 let seq = 0
 
+interface InternalTask extends QueueTask {
+  overwrite?: boolean
+}
+
 export class DownloadQueue extends EventEmitter {
-  private tasks: QueueTask[] = []
+  private tasks: InternalTask[] = []
   private running = false
   private paused = false
   private abortControllers = new Map<string, AbortController>()
@@ -24,16 +28,16 @@ export class DownloadQueue extends EventEmitter {
   }
 
   listTasks(): QueueTask[] {
-    return this.tasks.map((t) => ({ ...t }))
+    return this.tasks.map(({ overwrite: _o, ...t }) => ({ ...t }))
   }
 
-  enqueue(urls: string[]): QueueTask[] {
+  enqueue(urls: string[], opts?: { overwrite?: boolean }): QueueTask[] {
     const created: QueueTask[] = []
     for (const raw of urls) {
       const url = raw.trim()
       if (!url) continue
       const now = new Date().toISOString()
-      const task: QueueTask = {
+      const task: InternalTask = {
         id: `task_${Date.now()}_${seq++}`,
         url,
         status: 'queued',
@@ -41,9 +45,11 @@ export class DownloadQueue extends EventEmitter {
         total: 0,
         createdAt: now,
         updatedAt: now,
+        overwrite: opts?.overwrite,
       }
       this.tasks.push(task)
-      created.push({ ...task })
+      const { overwrite: _o, ...publicTask } = task
+      created.push({ ...publicTask })
     }
     this.emitUpdate()
     void this.pump()
@@ -110,7 +116,7 @@ export class DownloadQueue extends EventEmitter {
     }
   }
 
-  private async runTask(task: QueueTask): Promise<void> {
+  private async runTask(task: InternalTask): Promise<void> {
     const ac = new AbortController()
     this.abortControllers.set(task.id, ac)
 
@@ -147,7 +153,7 @@ export class DownloadQueue extends EventEmitter {
       this.emitUpdate()
 
       const existing = await this.opts.store.getGallery(parsed.source, parsed.galleryId)
-      const overwrite = Boolean(existing && existing.images.length === 0)
+      const overwrite = Boolean(task.overwrite || (existing && existing.images.length === 0))
 
       await downloadGallery(parsed, this.opts.store, {
         concurrency: this.opts.imageConcurrency,

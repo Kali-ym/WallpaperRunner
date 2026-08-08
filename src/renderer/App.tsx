@@ -54,7 +54,11 @@ export default function App(): JSX.Element {
 
       <main className="app-main">
         {active ? (
-          <GalleryPage entry={active} onBack={() => setActive(null)} />
+          <GalleryPage
+            entry={active}
+            onBack={() => setActive(null)}
+            onDeleted={() => setActive(null)}
+          />
         ) : tab === 'library' ? (
           <LibraryPage onOpenGallery={setActive} />
         ) : tab === 'download' ? (
