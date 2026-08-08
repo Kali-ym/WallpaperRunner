@@ -1,6 +1,6 @@
-import { BrowserWindow, dialog, ipcMain, protocol, net, session } from 'electron'
-import { join, normalize, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron'
+import { join, resolve, sep, extname } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { registerAdapter } from './adapters/registry'
 import { xchinaAdapter } from './adapters/xchina/adapter'
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
@@ -54,15 +54,41 @@ export async function initAppServices(): Promise<void> {
 
 export function registerProtocols(): void {
   protocol.handle('gallery-media', async (request) => {
-    const url = new URL(request.url)
-    const relative = url.searchParams.get('path')
-    if (!relative) return new Response('Bad Request', { status: 400 })
-    const root = normalize(settings.downloadRoot)
-    const abs = normalize(join(root, relative))
-    if (!abs.startsWith(root + sep) && abs !== root) {
-      return new Response('Forbidden', { status: 403 })
+    try {
+      const url = new URL(request.url)
+      const relative = url.searchParams.get('path')
+      if (!relative) return new Response('Bad Request', { status: 400 })
+
+      const root = resolve(settings.downloadRoot)
+      // relative may use "/" ; resolve handles it on Windows
+      const abs = resolve(root, relative)
+      const rootKey = root.toLowerCase()
+      const absKey = abs.toLowerCase()
+      if (absKey !== rootKey && !absKey.startsWith(rootKey + sep.toLowerCase())) {
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      const data = await readFile(abs)
+      const ext = extname(abs).toLowerCase()
+      const type =
+        ext === '.png'
+          ? 'image/png'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : 'image/jpeg'
+      return new Response(new Uint8Array(data), {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Content-Length': String(data.byteLength),
+          'Cache-Control': 'public, max-age=3600',
+        },
+      })
+    } catch {
+      return new Response('Not Found', { status: 404 })
     }
-    return net.fetch(pathToFileURL(abs).toString())
   })
 }
 
@@ -135,7 +161,6 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle('library:openFolder', async (_e, source: string, id: string) => {
-    const { shell } = await import('electron')
     const path = await store.openGalleryPath(source, id)
     await shell.openPath(path)
     return path
