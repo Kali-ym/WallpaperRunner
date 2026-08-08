@@ -21,7 +21,7 @@ function defaultSettings(): AppSettings {
     ''
   return {
     downloadRoot: join(homedir(), 'Pictures', 'gallery-library'),
-    imageConcurrency: 3,
+    imageConcurrency: 2,
     openAfterDownload: false,
     // Clash / common local proxy default; user can clear in settings
     proxyUrl: envProxy || 'http://127.0.0.1:7890',

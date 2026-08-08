@@ -159,8 +159,13 @@ export class DownloadQueue extends EventEmitter {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
-        onProgress: ({ done, total }) => {
-          this.patch(task.id, { done, total, status: 'downloading' })
+        onProgress: ({ done, total, failed }) => {
+          this.patch(task.id, {
+            done,
+            total,
+            status: 'downloading',
+            error: failed ? `失败 ${failed}` : undefined,
+          })
           this.emitUpdate()
         },
       })
@@ -176,6 +181,18 @@ export class DownloadQueue extends EventEmitter {
         this.patch(task.id, { status: 'cancelled', error: '已取消' })
       } else if (err instanceof GalleryExistsError) {
         this.patch(task.id, { status: 'skipped', error: err.message })
+      } else if (
+        err instanceof Error &&
+        (err as Error & { partialMeta?: unknown }).partialMeta
+      ) {
+        // Partial success already saved — mark completed with warning
+        const partial = (err as Error & { partialMeta: { images: string[] } }).partialMeta
+        this.patch(task.id, {
+          status: 'completed',
+          done: partial.images.length,
+          total: partial.images.length,
+          error: err.message,
+        })
       } else {
         const message = err instanceof Error ? err.message : String(err)
         this.patch(task.id, { status: 'failed', error: message })
