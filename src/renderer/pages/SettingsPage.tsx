@@ -54,6 +54,17 @@ export default function SettingsPage(): JSX.Element {
         />
       </label>
 
+      <label className="field">
+        <span>HTTP 代理（翻墙客户端本地端口，如 http://127.0.0.1:7890；留空则直连）</span>
+        <input
+          className="text-input"
+          value={settings.proxyUrl}
+          placeholder="http://127.0.0.1:7890"
+          onChange={(e) => setSettings({ ...settings, proxyUrl: e.target.value })}
+          onBlur={() => void save({ proxyUrl: settings.proxyUrl })}
+        />
+      </label>
+
       <label className="field checkbox">
         <input
           type="checkbox"

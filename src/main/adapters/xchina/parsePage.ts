@@ -13,131 +13,79 @@ export interface XchinaPageParse {
   images: XchinaPageImage[]
 }
 
-const IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i
-const AD_RE = /ad|promo|banner|sponsor|广告|妻社/i
+const BG_URL_RE = /background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i
 
-function absolutize(baseUrl: string, maybeRelative: string): string {
-  try {
-    return new URL(maybeRelative, baseUrl).toString()
-  } catch {
-    return maybeRelative
-  }
-}
-
-function isImageUrl(url: string): boolean {
-  return IMAGE_EXT_RE.test(url)
-}
-
-function upgradeThumbToOriginal(url: string): string {
+/** Convert CDN thumb URL to full-size original. */
+export function upgradeThumbToOriginal(url: string): string {
   return url
+    .replace(/_\d+x\d+\.(webp|jpe?g|png)$/i, '.jpg')
     .replace(/\/thumb\//i, '/')
     .replace(/\/small\//i, '/')
-    .replace(/\/s\//i, '/')
     .replace(/_thumb(\.[a-z]+)$/i, '$1')
     .replace(/_small(\.[a-z]+)$/i, '$1')
 }
 
-function isAdNode($: cheerio.CheerioAPI, el: cheerio.Element): boolean {
-  const node = $(el)
-  const marker = [
-    node.attr('class') ?? '',
-    node.attr('id') ?? '',
-    node.attr('data-ad') ?? '',
-    node.find('img').attr('alt') ?? '',
-    node.find('img').attr('src') ?? '',
-    node.find('a').attr('href') ?? '',
-  ].join(' ')
-  return AD_RE.test(marker) || node.closest('.ad-item,[data-ad]').length > 0
-}
-
-function extractOriginal($: cheerio.CheerioAPI, el: cheerio.Element, pageUrl: string): XchinaPageImage | null {
-  if (isAdNode($, el)) return null
-
-  const anchor = $(el).is('a') ? $(el) : $(el).find('a').first()
-  const img = $(el).is('img') ? $(el) : $(el).find('img').first()
-  if (!img.length && !anchor.length) return null
-
-  const href = anchor.attr('href')?.trim() ?? ''
-  const dataSrc = img.attr('data-src')?.trim() ?? ''
-  const src = img.attr('src')?.trim() ?? ''
-  const thumbOrLink = absolutize(pageUrl, dataSrc || src || href)
-  if (!thumbOrLink || AD_RE.test(thumbOrLink)) return null
-
-  let originalCandidate = ''
-  if (href && isImageUrl(href)) {
-    originalCandidate = absolutize(pageUrl, href)
-  } else if (dataSrc || src) {
-    originalCandidate = upgradeThumbToOriginal(absolutize(pageUrl, dataSrc || src))
-  } else if (href) {
-    originalCandidate = absolutize(pageUrl, href)
-  }
-
-  if (!originalCandidate || AD_RE.test(originalCandidate)) return null
-  return { thumbOrLink, originalCandidate }
+function extractBgUrl(style: string | undefined): string | null {
+  if (!style) return null
+  const m = style.match(BG_URL_RE)
+  return m?.[1] ?? null
 }
 
 export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse {
   const $ = cheerio.load(html)
 
   const title =
-    $('h1.photo-title, h1').first().text().trim() ||
-    $('meta[property="og:title"], meta[name="og:title"]').attr('content')?.trim() ||
+    $('h1.hero-title-item').first().text().trim() ||
+    $('.info-card.photo-detail .item .text').first().text().trim() ||
+    $('meta[property="og:title"]').attr('content')?.trim() ||
     $('title').text().split('-')[0]?.trim() ||
     ''
 
   const author =
-    $('.photo-info .author, .author a, .author, .model a, .model')
-      .first()
-      .text()
-      .trim() || ''
+    $('.model-container a.model-item').first().text().trim() ||
+    $('.model-avatar-container .model-item > div').first().text().trim() ||
+    ''
 
   const tags = $(
-    '.tags a.tag, a.tag, .photo-info a[href*="/tag/"], .categories a, .breadcrumb a',
+    '.info-card.photo-detail a[href*="/photos/series-"], .breadcrumb a[href*="/photos/series-"]',
   )
     .map((_, el) => $(el).text().trim())
     .get()
-    .filter((t) => t && t !== title)
+    .filter((t, i, arr) => Boolean(t) && arr.indexOf(t) === i)
 
   let pageCount = 1
-  $('a[href*="/photo/id-"]').each((_, el) => {
-    const href = $(el).attr('href') ?? ''
-    const m = href.match(/\/(\d+)\.html/i)
-    if (m) {
-      const pn = Number.parseInt(m[1], 10)
-      if (Number.isFinite(pn) && pn > pageCount) pageCount = pn
-    }
-  })
-  $('.pager a, .pagination a, .pages a, .page-list a').each((_, el) => {
-    const text = $(el).text().trim()
-    const n = Number.parseInt(text, 10)
+  $('.pager a.pager-num').each((_, el) => {
+    const n = Number.parseInt($(el).text().trim(), 10)
     if (Number.isFinite(n) && n > pageCount) pageCount = n
   })
 
   const images: XchinaPageImage[] = []
   const seen = new Set<string>()
 
-  const candidates = $(
-    [
-      '.photos .photo-item',
-      '.photos .item:not(.ad-item)',
-      '.photo-list .item',
-      '.items .item',
-      '.item .img',
-      'a[href*=".jpg"]',
-      'a[href*=".jpeg"]',
-      'a[href*=".png"]',
-      'a[href*=".webp"]',
-      'img[data-src]',
-      'img[src*="/photos/"]',
-    ].join(', '),
-  )
-  candidates.each((_, el) => {
-    const parsed = extractOriginal($, el, pageUrl)
-    if (!parsed) return
-    if (seen.has(parsed.originalCandidate)) return
-    seen.add(parsed.originalCandidate)
-    images.push(parsed)
+  $('.list.photo-items .item.photo-image').each((_, el) => {
+    const imgDiv = $(el).find('.img[style], div.img').first()
+    const thumb = extractBgUrl(imgDiv.attr('style'))
+    if (!thumb) return
+    if (!/\/photos\//i.test(thumb)) return
+
+    const originalCandidate = upgradeThumbToOriginal(thumb)
+    if (seen.has(originalCandidate)) return
+    seen.add(originalCandidate)
+    images.push({ thumbOrLink: thumb, originalCandidate })
   })
 
+  // Fallback: any photo CDN background in photo-items area
+  if (images.length === 0) {
+    $('.list.photo-items [style*="background-image"]').each((_, el) => {
+      const thumb = extractBgUrl($(el).attr('style'))
+      if (!thumb || !/\/photos\//i.test(thumb)) return
+      const originalCandidate = upgradeThumbToOriginal(thumb)
+      if (seen.has(originalCandidate)) return
+      seen.add(originalCandidate)
+      images.push({ thumbOrLink: thumb, originalCandidate })
+    })
+  }
+
+  void pageUrl
   return { title, author, tags, pageCount, images }
 }

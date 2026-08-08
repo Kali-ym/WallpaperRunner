@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { httpFetch } from '../http/client'
 
 export interface DownloadFileResult {
   bytes: number
@@ -17,6 +18,7 @@ export async function downloadFile(
     signal?: AbortSignal
     headers?: Record<string, string>
     retries?: number
+    referer?: string
   },
 ): Promise<DownloadFileResult> {
   const retries = opts?.retries ?? 3
@@ -24,12 +26,14 @@ export async function downloadFile(
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const res = await fetch(url, {
+      const res = await httpFetch(url, {
         signal: opts?.signal,
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Referer: 'https://xchina.co/',
+          Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          Referer: opts?.referer ?? 'https://xchina.co/',
           ...(opts?.headers ?? {}),
         },
       })
@@ -42,11 +46,19 @@ export async function downloadFile(
       }
 
       const buf = Buffer.from(await res.arrayBuffer())
+      const contentType = res.headers.get('content-type')
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error(`Expected image but got HTML from ${url}`)
+      }
+      if (buf.byteLength < 1024) {
+        throw new Error(`Downloaded file too small (${buf.byteLength} bytes): ${url}`)
+      }
+
       await mkdir(dirname(destPath), { recursive: true })
       await writeFile(destPath, buf)
       return {
         bytes: buf.byteLength,
-        contentType: res.headers.get('content-type'),
+        contentType,
       }
     } catch (err) {
       lastError = err

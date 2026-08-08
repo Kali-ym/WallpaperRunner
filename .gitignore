@@ -6,3 +6,6 @@ dist/
 .cursor/
 .worktrees/
 scaffold-tmp/
+tmp-e2e-download/
+fixtures/xchina/sample-*
+fixtures/xchina/live-attempt.html

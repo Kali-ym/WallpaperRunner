@@ -2,6 +2,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@main/http/client', () => ({
+  httpFetch: vi.fn(),
+  setHttpProxy: vi.fn(),
+  getHttpProxy: vi.fn(() => null),
+}))
+
+import { httpFetch } from '@main/http/client'
 import { clearAdapters, registerAdapter } from '@main/adapters/registry'
 import type { SourceAdapter } from '@main/adapters/types'
 import { LibraryStore } from '@main/library/store'
@@ -12,20 +20,19 @@ describe('DownloadQueue', () => {
 
   beforeEach(() => {
     clearAdapters()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        headers: { get: () => 'image/jpeg' },
-        arrayBuffer: async () => Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
-      })),
-    )
+    const bytes = Buffer.alloc(2048, 2)
+    vi.mocked(httpFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => bytes,
+      text: async () => '',
+    } as unknown as Response)
   })
 
   afterEach(async () => {
     clearAdapters()
-    vi.unstubAllGlobals()
+    vi.mocked(httpFetch).mockReset()
     await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })))
   })
 

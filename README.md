@@ -20,7 +20,10 @@ npm run dev
 2. 首版支持 `https://xchina.co/photo/id-xxxx.html`
 3. 下载完成后在「库」中搜索、浏览；大图支持 `←` `→` `Esc` `F`
 
-> 若本机无法访问 xchina.co（超时/403），需自行解决网络后再下载。单元测试使用 `fixtures/xchina` 离线样例。若页面改版导致解析不到图，请把真实 HTML 保存到 fixtures 并调整 `src/main/adapters/xchina/parsePage.ts`。
+## 代理
+
+默认代理：`http://127.0.0.1:7890`（可在「设置」修改）。  
+应用内走 Electron/Chromium 网络栈；命令行脚本在 Windows 上优先用 `curl.exe`（避免 Cloudflare 拦截 Node undici）。
 
 ## 扩展新来源
 

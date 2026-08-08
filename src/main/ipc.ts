@@ -1,8 +1,9 @@
-import { BrowserWindow, dialog, ipcMain, protocol, net } from 'electron'
+import { BrowserWindow, dialog, ipcMain, protocol, net, session } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { registerAdapter } from './adapters/registry'
 import { xchinaAdapter } from './adapters/xchina/adapter'
+import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
 import { DownloadQueue } from './queue/downloadQueue'
 import { loadSettings, saveSettings, type AppSettings } from './settings'
@@ -18,17 +19,35 @@ function broadcastTasks(): void {
   }
 }
 
-export async function initAppServices(): Promise<void> {
-  registerAdapter(xchinaAdapter)
-  settings = await loadSettings()
-  store = new LibraryStore(settings.downloadRoot)
-  await store.ensureRoot()
+async function applyNetwork(proxyUrl: string): Promise<void> {
+  setHttpProxy(proxyUrl || null)
+  setPreferCurl(false)
+  setHttpFetch((input, init) => net.fetch(String(input), init))
+  if (proxyUrl) {
+    await session.defaultSession.setProxy({
+      proxyRules: proxyUrl,
+      proxyBypassRules: '<local>',
+    })
+  } else {
+    await session.defaultSession.setProxy({ mode: 'direct' })
+  }
+}
 
+function rebuildQueue(): void {
   queue = new DownloadQueue({
     store,
     imageConcurrency: settings.imageConcurrency,
   })
   queue.on('task', () => broadcastTasks())
+}
+
+export async function initAppServices(): Promise<void> {
+  registerAdapter(xchinaAdapter)
+  settings = await loadSettings()
+  await applyNetwork(settings.proxyUrl)
+  store = new LibraryStore(settings.downloadRoot)
+  await store.ensureRoot()
+  rebuildQueue()
 }
 
 export function registerProtocols(): void {
@@ -50,13 +69,10 @@ export function registerIpc(): void {
 
   ipcMain.handle('settings:set', async (_e, partial: Partial<AppSettings>) => {
     settings = await saveSettings(partial)
+    await applyNetwork(settings.proxyUrl)
     store = new LibraryStore(settings.downloadRoot)
     await store.ensureRoot()
-    queue = new DownloadQueue({
-      store,
-      imageConcurrency: settings.imageConcurrency,
-    })
-    queue.on('task', () => broadcastTasks())
+    rebuildQueue()
     return settings
   })
 
@@ -68,11 +84,7 @@ export function registerIpc(): void {
     settings = await saveSettings({ downloadRoot: result.filePaths[0] })
     store = new LibraryStore(settings.downloadRoot)
     await store.ensureRoot()
-    queue = new DownloadQueue({
-      store,
-      imageConcurrency: settings.imageConcurrency,
-    })
-    queue.on('task', () => broadcastTasks())
+    rebuildQueue()
     return settings.downloadRoot
   })
 

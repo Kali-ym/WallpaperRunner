@@ -61,7 +61,10 @@ export async function downloadGallery(
     const tentativeExt = extensionFromUrlOrType(img.url, null)
     const baseName = String(index + 1).padStart(3, '0')
     let dest = join(dir, `${baseName}${tentativeExt}`)
-    const downloaded = await downloadFile(img.url, dest, { signal: opts.signal })
+    const downloaded = await downloadFile(img.url, dest, {
+      signal: opts.signal,
+      referer: result.sourceUrl,
+    })
     const finalExt = extensionFromUrlOrType(img.url, downloaded.contentType)
     if (finalExt !== tentativeExt) {
       const renamed = join(dir, `${baseName}${finalExt}`)

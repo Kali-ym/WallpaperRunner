@@ -1,3 +1,5 @@
+import { httpFetch } from '../http/client'
+
 const DEFAULT_HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -6,11 +8,11 @@ const DEFAULT_HEADERS: Record<string, string> = {
 }
 
 export async function fetchHtml(url: string, init?: RequestInit): Promise<string> {
-  const res = await fetch(url, {
+  const res = await httpFetch(url, {
     ...init,
     headers: {
       ...DEFAULT_HEADERS,
-      ...(init?.headers ?? {}),
+      ...(init?.headers as Record<string, string> | undefined),
     },
   })
   if (!res.ok) {
