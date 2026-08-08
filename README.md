@@ -20,10 +20,14 @@ npm run dev
 2. 首版支持 `https://xchina.co/photo/id-xxxx.html`
 3. 下载完成后在「库」中搜索、浏览；大图支持 `←` `→` `Esc` `F`
 
-## 代理
+## 验证爬取
 
-默认代理：`http://127.0.0.1:7890`（可在「设置」修改）。  
-应用内走 Electron/Chromium 网络栈；命令行脚本在 Windows 上优先用 `curl.exe`（避免 Cloudflare 拦截 Node undici）。
+```bash
+# 需本机代理可用（默认 127.0.0.1:7890）
+npx tsx scripts/e2e-xchina-download.ts
+```
+
+成功时应解析出 59 张，并下载数张约 200KB+ 的原图 JPEG 到 `tmp-e2e-download/`。
 
 ## 扩展新来源
 
