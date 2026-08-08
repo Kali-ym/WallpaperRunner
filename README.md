@@ -20,6 +20,8 @@ npm run dev
 2. 首版支持 `https://xchina.co/photo/id-xxxx.html`
 3. 下载完成后在「库」中搜索、浏览；大图支持 `←` `→` `Esc` `F`
 
+> 若本机无法访问 xchina.co（超时/403），需自行解决网络后再下载。单元测试使用 `fixtures/xchina` 离线样例。若页面改版导致解析不到图，请把真实 HTML 保存到 fixtures 并调整 `src/main/adapters/xchina/parsePage.ts`。
+
 ## 扩展新来源
 
 在 `src/main/adapters/` 新增适配器，实现 `SourceAdapter`，并在 `src/main/ipc.ts` 的 `initAppServices` 中 `registerAdapter(...)`。

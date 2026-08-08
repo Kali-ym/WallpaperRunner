@@ -86,19 +86,20 @@ export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse 
     ''
 
   const author =
-    $('.photo-info .author, .author a, .author').first().text().trim() || ''
+    $('.photo-info .author, .author a, .author, .model a, .model')
+      .first()
+      .text()
+      .trim() || ''
 
-  const tags = $('.tags a.tag, .tag, .photo-info a[href*="/tag/"]')
+  const tags = $(
+    '.tags a.tag, a.tag, .photo-info a[href*="/tag/"], .categories a, .breadcrumb a',
+  )
     .map((_, el) => $(el).text().trim())
     .get()
-    .filter(Boolean)
+    .filter((t) => t && t !== title)
 
   let pageCount = 1
-  $('.pager a, .pagination a, .pages a').each((_, el) => {
-    const text = $(el).text().trim()
-    const n = Number.parseInt(text, 10)
-    if (Number.isFinite(n) && n > pageCount) pageCount = n
-
+  $('a[href*="/photo/id-"]').each((_, el) => {
     const href = $(el).attr('href') ?? ''
     const m = href.match(/\/(\d+)\.html/i)
     if (m) {
@@ -106,11 +107,30 @@ export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse 
       if (Number.isFinite(pn) && pn > pageCount) pageCount = pn
     }
   })
+  $('.pager a, .pagination a, .pages a, .page-list a').each((_, el) => {
+    const text = $(el).text().trim()
+    const n = Number.parseInt(text, 10)
+    if (Number.isFinite(n) && n > pageCount) pageCount = n
+  })
 
   const images: XchinaPageImage[] = []
   const seen = new Set<string>()
 
-  const candidates = $('.photos .photo-item, .photos .item:not(.ad-item), .photo-list .item, a[href*=".jpg"], a[href*=".jpeg"], a[href*=".png"], a[href*=".webp"]')
+  const candidates = $(
+    [
+      '.photos .photo-item',
+      '.photos .item:not(.ad-item)',
+      '.photo-list .item',
+      '.items .item',
+      '.item .img',
+      'a[href*=".jpg"]',
+      'a[href*=".jpeg"]',
+      'a[href*=".png"]',
+      'a[href*=".webp"]',
+      'img[data-src]',
+      'img[src*="/photos/"]',
+    ].join(', '),
+  )
   candidates.each((_, el) => {
     const parsed = extractOriginal($, el, pageUrl)
     if (!parsed) return
