@@ -33,6 +33,10 @@ export const xchinaAdapter: SourceAdapter = {
       }
     }
 
+    if (images.length === 0) {
+      throw new Error('页面解析成功但未找到图片（可能是 CDN 路径变更或页面结构变化）')
+    }
+
     return {
       source: 'xchina',
       galleryId,

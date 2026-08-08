@@ -66,7 +66,8 @@ export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse 
     const imgDiv = $(el).find('.img[style], div.img').first()
     const thumb = extractBgUrl(imgDiv.attr('style'))
     if (!thumb) return
-    if (!/\/photos\//i.test(thumb)) return
+    // photos / photos2 / photos3 ...
+    if (!/\/photos\d*\//i.test(thumb)) return
 
     const originalCandidate = upgradeThumbToOriginal(thumb)
     if (seen.has(originalCandidate)) return
@@ -78,7 +79,7 @@ export function parseXchinaPage(html: string, pageUrl: string): XchinaPageParse 
   if (images.length === 0) {
     $('.list.photo-items [style*="background-image"]').each((_, el) => {
       const thumb = extractBgUrl($(el).attr('style'))
-      if (!thumb || !/\/photos\//i.test(thumb)) return
+      if (!thumb || !/\/photos\d*\//i.test(thumb)) return
       const originalCandidate = upgradeThumbToOriginal(thumb)
       if (seen.has(originalCandidate)) return
       seen.add(originalCandidate)

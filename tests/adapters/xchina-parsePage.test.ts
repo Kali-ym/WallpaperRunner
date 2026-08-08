@@ -11,6 +11,9 @@ describe('upgradeThumbToOriginal', () => {
     expect(
       upgradeThumbToOriginal('https://img.xchina.io/photos/abc/0001_600x0.webp'),
     ).toBe('https://img.xchina.io/photos/abc/0001.jpg')
+    expect(
+      upgradeThumbToOriginal('https://img.xchina.io/photos2/abc/0001_600x0.webp'),
+    ).toBe('https://img.xchina.io/photos2/abc/0001.jpg')
   })
 })
 
@@ -21,11 +24,28 @@ describe('parseXchinaPage', () => {
     expect(r.author).toContain('咬一口兔娘')
     expect(r.tags).toEqual(expect.arrayContaining(['国模套图']))
     expect(r.pageCount).toBe(4)
-    expect(r.images.length).toBe(4)
+    expect(r.images.length).toBe(5)
     expect(r.images[0].originalCandidate).toBe(
       'https://img.xchina.io/photos/63c799bf45baf/0001.jpg',
     )
     expect(r.images[0].thumbOrLink).toContain('_600x0.webp')
+    expect(r.images[4].originalCandidate).toBe(
+      'https://img.xchina.io/photos2/demo/0005.jpg',
+    )
+  })
+
+  it('parses live photos2 CDN gallery', () => {
+    let live: string
+    try {
+      live = fix('debug-64f6fc33f1832.html')
+    } catch {
+      return
+    }
+    const r = parseXchinaPage(live, 'https://xchina.co/photo/id-64f6fc33f1832/1.html')
+    expect(r.title).toContain('喵小吉')
+    expect(r.images.length).toBeGreaterThan(0)
+    expect(r.images[0].originalCandidate).toContain('/photos2/')
+    expect(r.images[0].originalCandidate).toMatch(/\.jpg$/)
   })
 
   it('parses later pages', () => {

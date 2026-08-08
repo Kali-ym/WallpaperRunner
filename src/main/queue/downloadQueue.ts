@@ -146,9 +146,13 @@ export class DownloadQueue extends EventEmitter {
       })
       this.emitUpdate()
 
+      const existing = await this.opts.store.getGallery(parsed.source, parsed.galleryId)
+      const overwrite = Boolean(existing && existing.images.length === 0)
+
       await downloadGallery(parsed, this.opts.store, {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
+        overwrite,
         onProgress: ({ done, total }) => {
           this.patch(task.id, { done, total, status: 'downloading' })
           this.emitUpdate()
