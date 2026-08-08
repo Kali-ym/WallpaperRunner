@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light;
+  --bg: #f3efe6;
+  --ink: #1c1915;
+  --muted: #6b645a;
+  --accent: #0f6e56;
+  --panel: #fffdf8;
+  --line: #d9d0c2;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, #ffe8c8 0%, transparent 40%),
+    linear-gradient(160deg, #f7f2e8, #ebe4d7);
+  color: var(--ink);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 20px 28px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.muted {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.app-main {
+  padding: 24px 28px;
+  flex: 1;
+}
