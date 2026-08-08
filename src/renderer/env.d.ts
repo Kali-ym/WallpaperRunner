@@ -1,7 +1,11 @@
 /// <reference types="vite/client" />
 
-interface Window {
-  api: {
-    ping: () => string
+import type { GalleryApi } from '../../preload/index'
+
+declare global {
+  interface Window {
+    api: GalleryApi
   }
 }
+
+export {}

@@ -1,5 +1,19 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, protocol } from 'electron'
 import { join } from 'node:path'
+import { initAppServices, registerIpc, registerProtocols } from './ipc'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'gallery-media',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+])
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -25,8 +39,12 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await initAppServices()
+  registerProtocols()
+  registerIpc()
   createWindow()
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
