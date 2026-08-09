@@ -38,6 +38,9 @@ export async function downloadFile(
         },
       })
 
+      if (res.status === 404) {
+        throw new Error(`资源不存在 (HTTP 404)，图床可能已失效: ${url}`)
+      }
       if (res.status === 403 || res.status === 429 || res.status >= 500) {
         throw new Error(`HTTP ${res.status}`)
       }

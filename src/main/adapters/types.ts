@@ -1,3 +1,5 @@
+import type { ResourceManifest } from '../resources/types'
+
 export interface ParsedImage {
   index: number
   url: string
@@ -18,11 +20,16 @@ export interface GalleryParseResult {
 export interface ParseContext {
   fetchText: (url: string) => Promise<string>
   signal?: AbortSignal
+  telegramApiId?: number
+  telegramApiHash?: string
 }
 
 export interface SourceAdapter {
   id: string
   name: string
   match(url: string): boolean
+  /** When true, UI must discover + select before download (Telegram/Telegraph). */
+  needsSelection?(url: string): boolean
+  discover?(url: string, ctx: ParseContext): Promise<ResourceManifest>
   parseGallery(url: string, ctx: ParseContext): Promise<GalleryParseResult>
 }

@@ -1,7 +1,7 @@
 # 套图库可用性与交互大升级 — 设计规格
 
 日期：2026-08-09  
-状态：已批准  
+状态：已批准 / 已实施  
 相关：既有 Telegram/Telegraph 渠道、库/下载/设置三页结构  
 实施计划：`docs/superpowers/plans/2026-08-09-app-ux-overhaul.md`
 

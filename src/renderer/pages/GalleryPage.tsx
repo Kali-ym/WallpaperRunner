@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import Lightbox from '../components/Lightbox'
+import { useToast } from '../lib/toast'
 import { api, type GalleryMetadata, type LibraryIndexEntry } from '../lib/api'
 
 interface Props {
@@ -13,6 +14,7 @@ function labelOf(entry: LibraryIndexEntry, meta: GalleryMetadata | null): string
 }
 
 export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.Element {
+  const toast = useToast()
   const [meta, setMeta] = useState<GalleryMetadata | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [selectMode, setSelectMode] = useState(false)
