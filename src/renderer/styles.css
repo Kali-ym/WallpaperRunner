@@ -713,17 +713,71 @@ textarea {
   place-items: center;
 }
 
-.modal-panel {
-  position: relative;
-  z-index: 1;
-  width: min(420px, calc(100vw - 32px));
-  padding: 22px 22px 18px;
-  border-radius: calc(var(--radius) + 4px);
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.field > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.meta-readonly {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.ctx-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.ctx-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.ctx-menu {
+  position: fixed;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  min-width: 160px;
   background: var(--panel);
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
-  display: grid;
-  gap: 12px;
+}
+
+.ctx-item {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.ctx-item.danger {
+  color: var(--danger);
+}
+
+.ctx-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .resource-thumb {
