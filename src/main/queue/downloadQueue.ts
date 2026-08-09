@@ -1,8 +1,10 @@
 import { EventEmitter } from 'node:events'
+import { join } from 'node:path'
 import { getAdapterById, resolveAdapter } from '../adapters/registry'
 import { downloadSelectedResources } from '../adapters/telegram/download'
 import { downloadGallery, GalleryExistsError } from '../downloader/downloadGallery'
 import { fetchHtml } from '../downloader/fetchHtml'
+import { findZipArtifacts } from '../library/extractZipGallery'
 import type { LibraryStore } from '../library/store'
 import { getResourceManifest, deleteResourceManifest } from '../resources/session'
 import { listManifestItems } from '../resources/types'
@@ -278,7 +280,7 @@ export class DownloadQueue extends EventEmitter {
         bytesTotal: { n: 0 },
       }
 
-      await downloadGallery(parsed, this.opts.store, {
+      const meta = await downloadGallery(parsed, this.opts.store, {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
@@ -306,6 +308,7 @@ export class DownloadQueue extends EventEmitter {
         etaSec: 0,
       })
       this.emitUpdate()
+      this.emitAskExtract(task.id, meta)
     } catch (err) {
       this.handleTaskError(task.id, ac, err)
     } finally {
@@ -416,6 +419,22 @@ export class DownloadQueue extends EventEmitter {
       etaSec: 0,
     })
     this.emitUpdate()
+    this.emitAskExtract(task.id, meta)
+  }
+
+  private emitAskExtract(taskId: string, meta: { source: string; galleryId: string; title: string; sourceUrl: string; images: string[]; author?: string }): void {
+    const zips = findZipArtifacts(meta.images)
+    if (zips.length === 0) return
+    const dir = this.opts.store.resolveGalleryDir(meta.source, meta.galleryId, meta.title)
+    this.emit('askExtract', {
+      taskId,
+      source: meta.source,
+      galleryId: meta.galleryId,
+      title: meta.title,
+      sourceUrl: meta.sourceUrl,
+      author: meta.author,
+      zipPaths: zips.map((name) => join(dir, name)),
+    })
   }
 
   private handleTaskError(taskId: string, ac: AbortController, err: unknown): void {

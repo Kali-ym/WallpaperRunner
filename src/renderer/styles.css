@@ -705,8 +705,25 @@ textarea {
   background: color-mix(in srgb, var(--panel) 92%, var(--bg));
 }
 
-.drawer-error {
-  padding: 0 18px;
+.modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(420px, calc(100vw - 32px));
+  padding: 22px 22px 18px;
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
 }
 
 .resource-thumb {

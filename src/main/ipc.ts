@@ -7,8 +7,21 @@ import { assertUrlsForSource } from './sources/validate'
 import { xchinaAdapter } from './adapters/xchina/adapter'
 import { telegramAdapter, discoverTelegramUrlsWithClient } from './adapters/telegram/adapter'
 import { telegraphAdapter, discoverTelegraph } from './adapters/telegraph/adapter'
-import { putResourceManifest } from './resources/session'
-import type { ResourceManifest } from './resources/types'
+import {
+  extractZipToGallery,
+  zipGalleryIdFromPath,
+  type ExtractZipOptions,
+} from './library/extractZipGallery'
+
+export type AskExtractPayload = {
+  taskId: string
+  source: string
+  galleryId: string
+  title: string
+  sourceUrl: string
+  author?: string
+  zipPaths: string[]
+}
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
 import { DownloadQueue } from './queue/downloadQueue'
@@ -114,6 +127,11 @@ function rebuildQueue(): void {
   })
   queue.on('task', () => broadcastTasks())
   queue.on('idle', () => scheduleWallpaperSync())
+  queue.on('askExtract', (payload: AskExtractPayload) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('queue:askExtract', payload)
+    }
+  })
 }
 
 export async function initAppServices(): Promise<void> {
@@ -341,6 +359,34 @@ export function registerIpc(): void {
     broadcastTasks()
     return tasks
   })
+
+  ipcMain.handle(
+    'library:extractZip',
+    async (
+      _e,
+      payload: {
+        zipPath: string
+        deleteZip?: boolean
+        source?: string
+        galleryId?: string
+        title?: string
+        sourceUrl?: string
+        author?: string
+      },
+    ) => {
+      const opts: ExtractZipOptions = {
+        source: payload.source ?? 'zip',
+        galleryId: payload.galleryId ?? zipGalleryIdFromPath(payload.zipPath),
+        title: payload.title ?? '压缩包图集',
+        sourceUrl: payload.sourceUrl ?? payload.zipPath,
+        author: payload.author,
+        deleteZip: payload.deleteZip,
+      }
+      const meta = await extractZipToGallery(payload.zipPath, store, opts)
+      scheduleWallpaperSync()
+      return meta
+    },
+  )
 
   ipcMain.handle(
     'queue:enqueue',

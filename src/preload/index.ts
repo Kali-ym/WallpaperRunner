@@ -41,6 +41,15 @@ const api = {
     ipcRenderer.invoke('library:setCover', source, id, relativePath),
   redownloadGallery: (sourceUrl: string): Promise<QueueTask[]> =>
     ipcRenderer.invoke('library:redownload', sourceUrl),
+  extractZip: (payload: {
+    zipPath: string
+    deleteZip?: boolean
+    source?: string
+    galleryId?: string
+    title?: string
+    sourceUrl?: string
+    author?: string
+  }): Promise<GalleryMetadata> => ipcRenderer.invoke('library:extractZip', payload),
   enqueueUrls: (
     source: DownloadSource,
     urls: string[],
@@ -93,6 +102,34 @@ const api = {
     }
     ipcRenderer.on('queue:update', listener)
     return () => ipcRenderer.removeListener('queue:update', listener)
+  },
+  onAskExtract: (
+    cb: (payload: {
+      taskId: string
+      source: string
+      galleryId: string
+      title: string
+      sourceUrl: string
+      author?: string
+      zipPaths: string[]
+    }) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: {
+        taskId: string
+        source: string
+        galleryId: string
+        title: string
+        sourceUrl: string
+        author?: string
+        zipPaths: string[]
+      },
+    ): void => {
+      cb(payload)
+    }
+    ipcRenderer.on('queue:askExtract', listener)
+    return () => ipcRenderer.removeListener('queue:askExtract', listener)
   },
   getMediaUrl: (dirName: string, relativePath: string): string => {
     const relative = `${dirName}/${relativePath}`.replace(/\\/g, '/')
