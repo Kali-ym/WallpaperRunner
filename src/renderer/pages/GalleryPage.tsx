@@ -123,7 +123,7 @@ export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.El
             if (!meta?.sourceUrl) return
             if (!window.confirm('重新下载将覆盖本地图片，继续？')) return
             void api.redownloadGallery(meta.sourceUrl).then(() => {
-              window.alert('已加入下载队列，请到「下载」页查看进度')
+              toast.success('已加入下载队列，请到「下载」页查看进度')
             })
           }}
         >
