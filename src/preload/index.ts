@@ -17,6 +17,26 @@ const api = {
     ipcRenderer.invoke('settings:pickDownloadRoot'),
   listLibrary: (query?: string, favoriteOnly?: boolean): Promise<LibraryIndexEntry[]> =>
     ipcRenderer.invoke('library:list', query, favoriteOnly),
+  listPlaylists: (): Promise<
+    Array<{
+      id: string
+      name: string
+      galleryRefs: Array<{ source: string; galleryId: string }>
+      createdAt: string
+      updatedAt: string
+    }>
+  > => ipcRenderer.invoke('playlists:list'),
+  createPlaylist: (name: string) => ipcRenderer.invoke('playlists:create', name),
+  renamePlaylist: (id: string, name: string) => ipcRenderer.invoke('playlists:rename', id, name),
+  deletePlaylist: (id: string): Promise<void> => ipcRenderer.invoke('playlists:delete', id),
+  setPlaylistMembers: (
+    id: string,
+    refs: Array<{ source: string; galleryId: string }>,
+  ) => ipcRenderer.invoke('playlists:setMembers', id, refs),
+  addGalleryToPlaylists: (
+    playlistIds: string[],
+    ref: { source: string; galleryId: string },
+  ): Promise<number> => ipcRenderer.invoke('playlists:addToPlaylists', playlistIds, ref),
   getGallery: (source: string, id: string): Promise<GalleryMetadata | null> =>
     ipcRenderer.invoke('library:get', source, id),
   rebuildLibrary: (): Promise<LibraryIndexEntry[]> =>
@@ -49,12 +69,16 @@ const api = {
   extractZip: (payload: {
     zipPath: string
     deleteZip?: boolean
+    password?: string
+    intoExisting?: boolean
     source?: string
     galleryId?: string
     title?: string
     sourceUrl?: string
     author?: string
   }): Promise<GalleryMetadata> => ipcRenderer.invoke('library:extractZip', payload),
+  listZipFiles: (source: string, id: string): Promise<string[]> =>
+    ipcRenderer.invoke('library:listZipFiles', source, id),
   enqueueUrls: (
     source: DownloadSource,
     urls: string[],
@@ -136,9 +160,22 @@ const api = {
     ipcRenderer.on('queue:askExtract', listener)
     return () => ipcRenderer.removeListener('queue:askExtract', listener)
   },
-  getMediaUrl: (dirName: string, relativePath: string): string => {
+  onLibraryChange: (cb: () => void): (() => void) => {
+    const listener = (): void => {
+      cb()
+    }
+    ipcRenderer.on('library:changed', listener)
+    return () => ipcRenderer.removeListener('library:changed', listener)
+  },
+  getMediaUrl: (
+    dirName: string,
+    relativePath: string,
+    opts?: { thumb?: boolean; bust?: string | number },
+  ): string => {
     const relative = `${dirName}/${relativePath}`.replace(/\\/g, '/')
-    return `gallery-media://local/?path=${encodeURIComponent(relative)}`
+    const thumb = opts?.thumb ? '&thumb=1' : ''
+    const bust = opts?.bust != null ? `&v=${encodeURIComponent(String(opts.bust))}` : ''
+    return `gallery-media://local/?path=${encodeURIComponent(relative)}${thumb}${bust}`
   },
 }
 

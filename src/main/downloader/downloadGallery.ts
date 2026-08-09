@@ -3,7 +3,7 @@ import { readdir, unlink } from 'node:fs/promises'
 import type { GalleryParseResult } from '../adapters/types'
 import type { GalleryMetadata, LibraryStore } from '../library/store'
 import { galleryFolderName } from '../library/paths'
-import { downloadFile, extensionFromUrlOrType } from './downloadFile'
+import { downloadFile, extensionFromUrlOrType, extensionFromMagic } from './downloadFile'
 
 export class GalleryExistsError extends Error {
   constructor(message: string) {
@@ -20,7 +20,17 @@ export interface DownloadGalleryOptions {
     done: number
     total: number
     failed?: number
-    file?: { id: string; name: string; status: 'pending' | 'downloading' | 'done' | 'failed'; error?: string }
+    file?: {
+      id: string
+      name: string
+      status: 'pending' | 'downloading' | 'done' | 'failed'
+      error?: string
+      bytesReceived?: number
+      bytesTotal?: number
+    }
+    bytesDelta?: number
+    bytesReceived?: number
+    bytesTotal?: number
   }) => void
 }
 
@@ -103,6 +113,7 @@ export async function downloadGallery(
     const tentativeExt = extensionFromUrlOrType(img.url, null)
     const baseName = String(index + 1).padStart(3, '0')
     const name = `${baseName}${tentativeExt}`
+    let lastByteMark = 0
     opts.onProgress?.({
       done,
       total,
@@ -116,20 +127,44 @@ export async function downloadGallery(
         // Prefer page referer for hotlink; fall back to gallery url
         referer: result.sourceUrl.replace(/\.html$/i, '/1.html'),
         retries: 4,
+        headers: {
+          Accept: '*/*',
+        },
+        onProgress: ({ received, total: fileTotal }) => {
+          const delta = Math.max(0, received - lastByteMark)
+          lastByteMark = received
+          opts.onProgress?.({
+            done,
+            total,
+            failed,
+            bytesDelta: delta,
+            bytesReceived: received,
+            bytesTotal: fileTotal ?? undefined,
+            file: {
+              id: fileId,
+              name,
+              status: 'downloading',
+              bytesReceived: received,
+              bytesTotal: fileTotal ?? undefined,
+            },
+          })
+        },
       })
-      const finalExt = extensionFromUrlOrType(img.url, downloaded.contentType)
-      let finalName = name
+      const { readFile, rename, access } = await import('node:fs/promises')
+      const head = await readFile(dest)
+      const magicExt = extensionFromMagic(head)
+      const typeExt = extensionFromUrlOrType(img.url, downloaded.contentType)
+      const finalExt = magicExt ?? typeExt
+      let finalName = `${baseName}${finalExt}`
       if (finalExt !== tentativeExt) {
-        const renamed = join(dir, `${baseName}${finalExt}`)
-        const { rename, access } = await import('node:fs/promises')
+        const renamed = join(dir, finalName)
         await rename(dest, renamed)
-        finalName = `${baseName}${finalExt}`
         await access(renamed)
       } else {
-        const { access } = await import('node:fs/promises')
         await access(dest)
+        finalName = name
       }
-      return { fileId, finalName }
+      return { fileId, finalName, bytes: downloaded.bytes, lastByteMark }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       opts.onProgress?.({
@@ -148,11 +183,19 @@ export async function downloadGallery(
     if (r.status === 'fulfilled') {
       imageNames[i] = r.value.finalName
       done += 1
+      const rem = Math.max(0, r.value.bytes - r.value.lastByteMark)
       opts.onProgress?.({
         done,
         total,
         failed,
-        file: { id: fileId, name: r.value.finalName, status: 'done' },
+        bytesDelta: rem,
+        file: {
+          id: fileId,
+          name: r.value.finalName,
+          status: 'done',
+          bytesReceived: r.value.bytes,
+          bytesTotal: r.value.bytes,
+        },
       })
     } else {
       failed += 1

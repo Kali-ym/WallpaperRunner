@@ -110,11 +110,20 @@ async function curlFetch(url: string, init?: RequestInit): Promise<Response> {
   return new Response(body, { status: Number.isFinite(status) ? status : 500, headers: hdrs })
 }
 
-export async function httpFetch(url: string, init?: UndiciRequestInit): Promise<Response> {
+export type HttpFetchOptions = {
+  /** Skip curl.exe so Response.body can be streamed (progress). */
+  disableCurl?: boolean
+}
+
+export async function httpFetch(
+  url: string,
+  init?: UndiciRequestInit,
+  opts?: HttpFetchOptions,
+): Promise<Response> {
   if (customFetch) {
     return customFetch(url, init as RequestInit)
   }
-  if (preferCurl) {
+  if (preferCurl && !opts?.disableCurl) {
     try {
       return await curlFetch(url, init as RequestInit)
     } catch (err) {

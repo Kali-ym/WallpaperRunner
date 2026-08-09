@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type JSX, type MouseEvent } from 'rea
 import GalleryCard from '../components/GalleryCard'
 import ContextMenu from '../components/ContextMenu'
 import EditMetadataModal from '../components/EditMetadataModal'
+import JoinPlaylistModal from '../components/JoinPlaylistModal'
 import { useToast } from '../lib/toast'
 import { api, type GalleryMetadata, type LibraryIndexEntry } from '../lib/api'
 
@@ -27,19 +28,45 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   const [editEntry, setEditEntry] = useState<LibraryIndexEntry | null>(null)
   const [editDetail, setEditDetail] = useState<GalleryMetadata | null>(null)
   const [editBusy, setEditBusy] = useState(false)
+  const [joinRefs, setJoinRefs] = useState<LibraryIndexEntry[] | null>(null)
+  const [joinLists, setJoinLists] = useState<
+    Array<{ id: string; name: string; galleryRefs: Array<{ source: string; galleryId: string }> }>
+  >([])
 
-  const reload = useCallback(() => {
-    setLoading(true)
-    void api.listLibrary(query, favoriteOnly).then((list) => {
+  const reload = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
+    void api.listLibrary(query, favoriteOnly).then((list: LibraryIndexEntry[]) => {
       setItems(list)
       setLoading(false)
     })
   }, [query, favoriteOnly])
 
   useEffect(() => {
-    const timer = setTimeout(reload, 150)
+    const timer = setTimeout(() => reload(), 150)
     return () => clearTimeout(timer)
   }, [reload])
+
+  useEffect(() => {
+    return api.onLibraryChange(() => reload({ silent: true }))
+  }, [reload])
+
+  function patchFavorite(entry: LibraryIndexEntry, favorite: boolean): void {
+    setItems((prev) => {
+      const next = prev.map((e) =>
+        e.source === entry.source && e.galleryId === entry.galleryId ? { ...e, favorite } : e,
+      )
+      if (favoriteOnly && !favorite) {
+        return next.filter(
+          (e) => !(e.source === entry.source && e.galleryId === entry.galleryId),
+        )
+      }
+      return next
+    })
+    void api.setFavorite(entry.source, entry.galleryId, favorite).catch(() => {
+      reload({ silent: true })
+      toast.error('收藏更新失败')
+    })
+  }
 
   function toggleSelect(entry: LibraryIndexEntry): void {
     const k = keyOf(entry)
@@ -82,6 +109,13 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     setMenu({ x: e.clientX, y: e.clientY, entry: null })
   }
 
+  async function openJoin(entries: LibraryIndexEntry[]): Promise<void> {
+    if (entries.length === 0) return
+    const pls = await api.listPlaylists()
+    setJoinLists(pls)
+    setJoinRefs(entries)
+  }
+
   async function onMenuSelect(id: string): Promise<void> {
     const entry = menu?.entry
     if (id === 'cleanup') {
@@ -98,8 +132,10 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
       setEditDetail(detail)
     }
     if (id === 'favorite') {
-      await api.setFavorite(entry.source, entry.galleryId, !entry.favorite)
-      reload()
+      patchFavorite(entry, !entry.favorite)
+    }
+    if (id === 'addPlaylist') {
+      await openJoin([entry])
     }
     if (id === 'folder') {
       await api.openGalleryFolder(entry.source, entry.galleryId)
@@ -153,6 +189,16 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           <button type="button" className="btn" onClick={() => void batchFavorite(false)}>
             取消收藏
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              const entries = items.filter((e) => selected.has(keyOf(e)))
+              void openJoin(entries)
+            }}
+          >
+            加入播放列表
+          </button>
           <button type="button" className="btn danger" onClick={() => void batchDelete()}>
             批量删除
           </button>
@@ -181,9 +227,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                 selected={selected.has(keyOf(entry))}
                 onOpen={onOpenGallery}
                 onToggleSelect={toggleSelect}
-                onToggleFavorite={(e) =>
-                  void api.setFavorite(e.source, e.galleryId, !e.favorite).then(reload)
-                }
+                onToggleFavorite={(e) => patchFavorite(e, !e.favorite)}
               />
             </div>
           ))}
@@ -199,10 +243,8 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
               ? [
                   { id: 'open', label: '打开' },
                   { id: 'edit', label: '编辑信息' },
-                  {
-                    id: 'favorite',
-                    label: menu.entry.favorite ? '取消收藏' : '收藏',
-                  },
+                  { id: 'favorite', label: menu.entry.favorite ? '取消收藏' : '收藏' },
+                  { id: 'addPlaylist', label: '加入播放列表…' },
                   { id: 'folder', label: '打开文件夹' },
                   { id: 'redownload', label: '重新下载' },
                   { id: 'delete', label: '删除', danger: true },
@@ -233,9 +275,24 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                 setEditDetail(null)
                 reload()
               })
-              .catch((err) => toast.error(err instanceof Error ? err.message : String(err)))
+              .catch((err: unknown) => toast.error(err instanceof Error ? err.message : String(err)))
               .finally(() => setEditBusy(false))
           }}
+        />
+      ) : null}
+
+      {joinRefs ? (
+        <JoinPlaylistModal
+          initialPlaylists={joinLists}
+          refs={joinRefs.map((e) => ({ source: e.source, galleryId: e.galleryId }))}
+          titles={joinRefs.map((e) => e.displayTitle?.trim() || e.title)}
+          onClose={() => setJoinRefs(null)}
+          onSaved={(message) => {
+            toast.success(message)
+            setJoinRefs(null)
+            if (selectMode) setSelected(new Set())
+          }}
+          onError={(message) => toast.error(message)}
         />
       ) : null}
     </section>

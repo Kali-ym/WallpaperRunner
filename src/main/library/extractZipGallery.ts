@@ -1,9 +1,21 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
 import sevenBin from '7zip-bin'
+import { createExtractorFromFile } from 'node-unrar-js'
 import { galleryFolderName } from './paths'
 import { isArchiveFileName, nextImageStartIndex } from './imageIndex'
 import type { GalleryMetadata, LibraryStore } from './store'
@@ -182,45 +194,111 @@ function isPasswordError(stderr: string, stdout: string): boolean {
   )
 }
 
+function mapUnrarError(err: unknown, password?: string): Error {
+  const e = err as { reason?: string; message?: string }
+  const reason = String(e.reason ?? '')
+  if (reason === 'ERAR_MISSING_PASSWORD' || (!password && /password/i.test(String(e.message)))) {
+    return new ZipPasswordRequiredError('压缩包已加密，请输入密码')
+  }
+  if (reason === 'ERAR_BAD_PASSWORD') {
+    return new ZipPasswordRequiredError('密码不正确，请重试')
+  }
+  if (reason === 'ERAR_BAD_DATA' || reason === 'ERAR_BAD_ARCHIVE') {
+    return new Error('RAR 文件损坏或不是有效压缩包')
+  }
+  return new Error(`解压失败: ${(e.message || String(err)).trim().slice(0, 300) || '未知错误'}`)
+}
+
+/** Official unrar (WASM) — 7za does not support RAR. */
+async function extractRarArchive(
+  archivePath: string,
+  destDir: string,
+  password?: string,
+): Promise<void> {
+  try {
+    const extractor = await createExtractorFromFile({
+      filepath: archivePath,
+      targetPath: destDir,
+      password: password || undefined,
+    })
+    // Generators are lazy; must iterate to actually extract.
+    const { files } = extractor.extract()
+    for (const _ of files) {
+      /* drain */
+    }
+  } catch (err) {
+    throw mapUnrarError(err, password)
+  }
+}
+
 async function extractArchiveWith7z(
   archivePath: string,
   destDir: string,
   password?: string,
 ): Promise<void> {
   const bin = sevenBin.path7za
-  // -p with empty value avoids interactive prompt when no password;
-  // with password: -pSECRET (no space)
-  const args = [
-    'x',
-    archivePath,
-    `-o${destDir}`,
-    '-y',
-    '-aos',
-    password ? `-p${password}` : '-p',
-  ]
+  // 7za on Windows mangles non-ASCII paths; copy to an ASCII-only temp path first.
+  const stage = await mkdtemp(join(tmpdir(), 'gallery-7z-src-'))
+  const ext = extname(archivePath).toLowerCase() || '.bin'
+  const safeArchive = join(stage, `pack${ext}`)
   try {
-    await execFileAsync(bin, args, {
-      windowsHide: true,
-      maxBuffer: 20 * 1024 * 1024,
-    })
-  } catch (err) {
-    const e = err as { stderr?: string; stdout?: string; message?: string }
-    const stderr = String(e.stderr ?? '')
-    const stdout = String(e.stdout ?? '')
-    const message = String(e.message ?? err)
-    if (isPasswordError(stderr, stdout) || isPasswordError(message, '')) {
-      throw new ZipPasswordRequiredError(
-        password ? '密码不正确，请重试' : '压缩包已加密，请输入密码',
+    await copyFile(archivePath, safeArchive)
+    const kind = await detectArchiveKind(safeArchive)
+    if (!kind) {
+      throw new Error('文件不是有效的压缩包（可能损坏或扩展名错误）')
+    }
+
+    const args = [
+      'x',
+      safeArchive,
+      `-o${destDir}`,
+      '-y',
+      '-aos',
+      password ? `-p${password}` : '-p',
+    ]
+    try {
+      await execFileAsync(bin, args, {
+        windowsHide: true,
+        maxBuffer: 20 * 1024 * 1024,
+      })
+    } catch (err) {
+      const e = err as { stderr?: string; stdout?: string; message?: string }
+      const stderr = String(e.stderr ?? '')
+      const stdout = String(e.stdout ?? '')
+      const message = String(e.message ?? err)
+      if (isPasswordError(stderr, stdout) || isPasswordError(message, '')) {
+        throw new ZipPasswordRequiredError(
+          password ? '密码不正确，请重试' : '压缩包已加密，请输入密码',
+        )
+      }
+      if (/password/i.test(`${stderr}${stdout}${message}`) && !password) {
+        throw new ZipPasswordRequiredError('压缩包已加密，请输入密码')
+      }
+      if (/Cannot open the file as archive/i.test(`${stderr}\n${stdout}\n${message}`)) {
+        throw new Error(
+          `无法打开压缩包（${kind}）。请确认文件完整；若有密码请填写正确密码`,
+        )
+      }
+      throw new Error(
+        `解压失败: ${(stderr || stdout || message).trim().slice(0, 300) || '未知错误'}`,
       )
     }
-    // Some builds only put hint in combined message
-    if (/password/i.test(`${stderr}${stdout}${message}`) && !password) {
-      throw new ZipPasswordRequiredError('压缩包已加密，请输入密码')
-    }
-    throw new Error(
-      `解压失败: ${(stderr || stdout || message).trim().slice(0, 300) || '未知错误'}`,
-    )
+  } finally {
+    await rm(stage, { recursive: true, force: true }).catch(() => undefined)
   }
+}
+
+async function extractArchive(
+  archivePath: string,
+  destDir: string,
+  kind: ArchiveKind,
+  password?: string,
+): Promise<void> {
+  if (kind === 'rar') {
+    await extractRarArchive(archivePath, destDir, password)
+    return
+  }
+  await extractArchiveWith7z(archivePath, destDir, password)
 }
 
 export async function extractZipToGallery(
@@ -235,7 +313,7 @@ export async function extractZipToGallery(
 
   const tempRoot = await mkdtemp(join(tmpdir(), 'gallery-unzip-'))
   try {
-    await extractArchiveWith7z(zipPath, tempRoot, opts.password)
+    await extractArchive(zipPath, tempRoot, kind, opts.password)
 
     const found = await collectImagesFromDir(tempRoot)
     if (found.length === 0) {

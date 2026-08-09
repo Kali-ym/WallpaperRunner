@@ -4,12 +4,18 @@ import { getAdapterById, resolveAdapter } from '../adapters/registry'
 import { downloadSelectedResources } from '../adapters/telegram/download'
 import { downloadGallery, GalleryExistsError } from '../downloader/downloadGallery'
 import { fetchHtml } from '../downloader/fetchHtml'
-import { findZipArtifacts } from '../library/extractZipGallery'
+import { findZipArtifacts, resolveZipArtifacts } from '../library/extractZipGallery'
 import type { LibraryStore } from '../library/store'
 import { getResourceManifest, deleteResourceManifest } from '../resources/session'
 import { listManifestItems } from '../resources/types'
 import { telegramService } from '../telegram/client'
-import { computeEtaSec, computePercent, RateTracker, type QueueFileProgress } from './progress'
+import {
+  aggregateByteProgress,
+  computeByteEtaSec,
+  computePercent,
+  RateTracker,
+  type QueueFileProgress,
+} from './progress'
 import type { QueueProgress, QueueTask, QueueTaskStatus } from './types'
 
 export interface DownloadQueueOptions {
@@ -151,7 +157,10 @@ export class DownloadQueue extends EventEmitter {
     const task = this.tasks.find((t) => t.id === taskId)
     if (!task) return
     Object.assign(task, partial, { updatedAt: new Date().toISOString() })
-    if (partial.done !== undefined || partial.total !== undefined) {
+    if (
+      partial.percent === undefined &&
+      (partial.done !== undefined || partial.total !== undefined)
+    ) {
       task.percent = computePercent(task.done, task.total)
     }
     const progress: QueueProgress = {
@@ -161,6 +170,8 @@ export class DownloadQueue extends EventEmitter {
       total: task.total,
       percent: task.percent,
       bytesPerSec: task.bytesPerSec,
+      bytesReceived: task.bytesReceived,
+      bytesTotal: task.bytesTotal,
       etaSec: task.etaSec,
       files: task.files,
       error: task.error,
@@ -172,7 +183,7 @@ export class DownloadQueue extends EventEmitter {
   private mergeFileProgress(
     taskId: string,
     file: QueueFileProgress,
-    rates: { fileRate: RateTracker; byteRate: RateTracker; bytesTotal: { n: number } },
+    rates: { byteRate: RateTracker; bytesDownloaded: { n: number } },
     done: number,
     total: number,
     failed?: number,
@@ -182,15 +193,38 @@ export class DownloadQueue extends EventEmitter {
     if (!task) return
     const files = [...(task.files ?? [])]
     const idx = files.findIndex((f) => f.id === file.id)
-    if (idx >= 0) files[idx] = { ...files[idx], ...file }
-    else files.push(file)
+    if (idx >= 0) {
+      const prev = files[idx]
+      const merged: QueueFileProgress = {
+        ...prev,
+        ...file,
+        bytesReceived: file.bytesReceived ?? prev.bytesReceived,
+        bytesTotal: file.bytesTotal ?? prev.bytesTotal,
+      }
+      if (merged.status === 'done') {
+        const size = merged.bytesTotal ?? merged.bytesReceived
+        if (size != null && size > 0) {
+          merged.bytesReceived = size
+          merged.bytesTotal = size
+        }
+      }
+      files[idx] = merged
+    } else {
+      files.push(file)
+    }
 
     if (bytesDelta && bytesDelta > 0) {
-      rates.bytesTotal.n += bytesDelta
+      rates.bytesDownloaded.n += bytesDelta
     }
-    const filesPerSec = rates.fileRate.sample(done)
-    const bytesPerSec = rates.byteRate.sample(rates.bytesTotal.n)
-    const etaSec = computeEtaSec(done, total, filesPerSec)
+
+    const agg = aggregateByteProgress(files)
+    const received = Math.max(agg.received, rates.bytesDownloaded.n)
+    const byteTotal = agg.total > 0 ? Math.max(agg.total, received) : 0
+    const percent =
+      byteTotal > 0 ? Math.min(100, Math.round((received / byteTotal) * 100)) : 0
+    const bytesPerSec = rates.byteRate.sample(received)
+    const etaSec =
+      byteTotal > 0 ? computeByteEtaSec(received, byteTotal, bytesPerSec) : null
 
     this.patch(taskId, {
       done,
@@ -198,8 +232,10 @@ export class DownloadQueue extends EventEmitter {
       status: 'downloading',
       files,
       bytesPerSec: bytesPerSec > 0 ? Math.round(bytesPerSec) : undefined,
+      bytesReceived: received,
+      bytesTotal: byteTotal > 0 ? byteTotal : undefined,
       etaSec,
-      percent: computePercent(done, total),
+      percent,
       error: failed ? `失败 ${failed}` : undefined,
     })
     this.emitUpdate()
@@ -275,18 +311,17 @@ export class DownloadQueue extends EventEmitter {
       const existing = await this.opts.store.getGallery(parsed.source, parsed.galleryId)
       const overwrite = Boolean(task.overwrite || (existing && existing.images.length === 0))
       const rates = {
-        fileRate: new RateTracker(),
         byteRate: new RateTracker(),
-        bytesTotal: { n: 0 },
+        bytesDownloaded: { n: 0 },
       }
 
       const meta = await downloadGallery(parsed, this.opts.store, {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
-        onProgress: ({ done, total, failed, file }) => {
+        onProgress: ({ done, total, failed, file, bytesDelta }) => {
           if (file) {
-            this.mergeFileProgress(task.id, file, rates, done, total, failed)
+            this.mergeFileProgress(task.id, file, rates, done, total, failed, bytesDelta)
           } else {
             this.patch(task.id, {
               done,
@@ -308,7 +343,7 @@ export class DownloadQueue extends EventEmitter {
         etaSec: 0,
       })
       this.emitUpdate()
-      this.emitAskExtract(task.id, meta)
+      void this.emitAskExtract(task.id, meta)
     } catch (err) {
       this.handleTaskError(task.id, ac, err)
     } finally {
@@ -338,10 +373,25 @@ export class DownloadQueue extends EventEmitter {
           id,
           name: item?.fileName || item?.label || id,
           status: 'pending' as const,
+          bytesTotal: item?.size && item.size > 0 ? item.size : undefined,
         }
       }),
     })
     this.emitUpdate()
+
+    // Seed expected byte total from known sizes
+    {
+      const files = this.tasks.find((t) => t.id === task.id)?.files ?? []
+      const agg = aggregateByteProgress(files)
+      if (agg.total > 0) {
+        this.patch(task.id, {
+          bytesReceived: 0,
+          bytesTotal: agg.total,
+          percent: 0,
+        })
+        this.emitUpdate()
+      }
+    }
 
     const existing = await this.opts.store.getGallery(
       stored.manifest.source,
@@ -363,9 +413,8 @@ export class DownloadQueue extends EventEmitter {
     }
 
     const rates = {
-      fileRate: new RateTracker(),
       byteRate: new RateTracker(),
-      bytesTotal: { n: 0 },
+      bytesDownloaded: { n: 0 },
     }
 
     const meta = await downloadSelectedResources(
@@ -380,15 +429,7 @@ export class DownloadQueue extends EventEmitter {
         overwrite,
         onProgress: ({ done, total, failed, lastError, file, bytesDelta }) => {
           if (file) {
-            this.mergeFileProgress(
-              task.id,
-              file,
-              rates,
-              done,
-              total,
-              failed,
-              bytesDelta,
-            )
+            this.mergeFileProgress(task.id, file, rates, done, total, failed, bytesDelta)
             if (lastError && failed) {
               this.patch(task.id, {
                 error: `失败 ${failed} · ${lastError}`,
@@ -419,13 +460,31 @@ export class DownloadQueue extends EventEmitter {
       etaSec: 0,
     })
     this.emitUpdate()
-    this.emitAskExtract(task.id, meta)
+    void this.emitAskExtract(task.id, meta)
   }
 
-  private emitAskExtract(taskId: string, meta: { source: string; galleryId: string; title: string; sourceUrl: string; images: string[]; author?: string }): void {
-    const zips = findZipArtifacts(meta.images)
-    if (zips.length === 0) return
+  private async emitAskExtract(
+    taskId: string,
+    meta: {
+      source: string
+      galleryId: string
+      title: string
+      sourceUrl: string
+      images: string[]
+      author?: string
+    },
+  ): Promise<void> {
     const dir = this.opts.store.resolveGalleryDir(meta.source, meta.galleryId, meta.title)
+    const { zipNames, renamedMeta } = await resolveZipArtifacts(dir, meta.images)
+    if (renamedMeta) {
+      const current = await this.opts.store.getGallery(meta.source, meta.galleryId)
+      if (current) {
+        await this.opts.store.upsertGallery({ ...current, images: renamedMeta })
+        meta = { ...meta, images: renamedMeta }
+      }
+    }
+    const zips = zipNames.length > 0 ? zipNames : findZipArtifacts(meta.images)
+    if (zips.length === 0) return
     this.emit('askExtract', {
       taskId,
       source: meta.source,

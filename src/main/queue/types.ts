@@ -22,6 +22,10 @@ export interface QueueTask {
   total: number
   percent?: number
   bytesPerSec?: number
+  /** Bytes received for the active file when known. */
+  bytesReceived?: number
+  /** Total bytes of the active file when known. */
+  bytesTotal?: number
   etaSec?: number | null
   files?: QueueFileProgress[]
   error?: string
@@ -39,6 +43,8 @@ export interface QueueProgress {
   total: number
   percent?: number
   bytesPerSec?: number
+  bytesReceived?: number
+  bytesTotal?: number
   etaSec?: number | null
   files?: QueueFileProgress[]
   error?: string

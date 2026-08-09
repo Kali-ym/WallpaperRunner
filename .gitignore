@@ -7,5 +7,6 @@ dist/
 .worktrees/
 scaffold-tmp/
 tmp-e2e-download/
+*.session
 fixtures/xchina/sample-*
 fixtures/xchina/live-attempt.html

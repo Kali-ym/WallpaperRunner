@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { memo, type JSX } from 'react'
 import type { LibraryIndexEntry } from '../lib/api'
 import { api } from '../lib/api'
 
@@ -15,7 +15,7 @@ function labelOf(entry: LibraryIndexEntry): string {
   return entry.displayTitle?.trim() || entry.title
 }
 
-export default function GalleryCard({
+function GalleryCard({
   entry,
   selected,
   selectMode,
@@ -24,7 +24,10 @@ export default function GalleryCard({
   onToggleFavorite,
 }: Props): JSX.Element {
   const cover = entry.cover
-    ? api.getMediaUrl(entry.dirName, entry.cover)
+    ? api.getMediaUrl(entry.dirName, entry.cover, {
+        thumb: true,
+        bust: entry.downloadedAt,
+      })
     : undefined
 
   return (
@@ -52,7 +55,7 @@ export default function GalleryCard({
       <button type="button" className="gallery-card-main" onClick={() => onOpen(entry)}>
         <div className="gallery-card-cover">
           {cover ? (
-            <img src={cover} alt={labelOf(entry)} loading="lazy" />
+            <img src={cover} alt={labelOf(entry)} loading="lazy" decoding="async" />
           ) : (
             <div className="cover-empty">无封面</div>
           )}
@@ -68,3 +71,5 @@ export default function GalleryCard({
     </div>
   )
 }
+
+export default memo(GalleryCard)

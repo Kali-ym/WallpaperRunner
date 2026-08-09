@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron'
-import { resolve, sep, extname } from 'node:path'
+import { resolve, sep, extname, join } from 'node:path'
 import { mkdir, readFile } from 'node:fs/promises'
 import { getAdapterById, registerAdapter, resolveAdapter } from './adapters/registry'
 import { isDownloadSource, type DownloadSource } from './sources/types'
@@ -10,8 +10,12 @@ import { telegraphAdapter, discoverTelegraph } from './adapters/telegraph/adapte
 import {
   extractZipToGallery,
   zipGalleryIdFromPath,
+  ZipPasswordRequiredError,
   type ExtractZipOptions,
 } from './library/extractZipGallery'
+import { putResourceManifest } from './resources/session'
+import type { ResourceManifest } from './resources/types'
+import { resolveCoverThumb } from './library/thumbnails'
 
 export type AskExtractPayload = {
   taskId: string
@@ -24,6 +28,7 @@ export type AskExtractPayload = {
 }
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
+import { PlaylistStore } from './library/playlists'
 import { DownloadQueue } from './queue/downloadQueue'
 import { loadSettings, saveSettings, type AppSettings } from './settings'
 import { telegramService } from './telegram/client'
@@ -41,16 +46,34 @@ import {
 } from './wallpaper/startup'
 
 let store: LibraryStore
+let playlistStore: PlaylistStore
 let queue: DownloadQueue
 let settings: AppSettings
 let wallpaperSyncTimer: ReturnType<typeof setTimeout> | null = null
 let wallpaperSyncInFlight: Promise<SyncWallpaperResult | null> | null = null
+let libraryChangeTimer: ReturnType<typeof setTimeout> | null = null
 
 function broadcastTasks(): void {
   const payload = queue.listTasks()
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send('queue:update', payload)
   }
+}
+
+function broadcastLibraryChanged(): void {
+  if (libraryChangeTimer) clearTimeout(libraryChangeTimer)
+  libraryChangeTimer = setTimeout(() => {
+    libraryChangeTimer = null
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('library:changed')
+    }
+  }, 80)
+}
+
+function bindLibraryStore(next: LibraryStore): void {
+  store = next
+  playlistStore = new PlaylistStore(next.root)
+  store.on('change', () => broadcastLibraryChanged())
 }
 
 async function ensureMediaServer(): Promise<void> {
@@ -73,6 +96,7 @@ async function runWallpaperSync(): Promise<SyncWallpaperResult | null> {
         store,
         settings.wallpaperEngineDir,
         settings.wallpaperMediaPort || DEFAULT_MEDIA_PORT,
+        playlistStore,
       )
       await ensureMediaServer()
       return result
@@ -140,7 +164,7 @@ export async function initAppServices(): Promise<void> {
   registerAdapter(telegraphAdapter)
   settings = await loadSettings()
   await applyNetwork(settings.proxyUrl)
-  store = new LibraryStore(settings.downloadRoot)
+  bindLibraryStore(new LibraryStore(settings.downloadRoot))
   await store.ensureRoot()
   rebuildQueue()
   await ensureMediaServer()
@@ -170,22 +194,37 @@ export function registerProtocols(): void {
         return new Response('Forbidden', { status: 403 })
       }
 
-      const data = await readFile(abs)
-      const ext = extname(abs).toLowerCase()
-      const type =
-        ext === '.png'
+      const wantThumb = url.searchParams.get('thumb') === '1'
+      let filePath = abs
+      let type =
+        extname(abs).toLowerCase() === '.png'
           ? 'image/png'
-          : ext === '.webp'
+          : extname(abs).toLowerCase() === '.webp'
             ? 'image/webp'
-            : ext === '.gif'
+            : extname(abs).toLowerCase() === '.gif'
               ? 'image/gif'
               : 'image/jpeg'
+
+      if (wantThumb) {
+        try {
+          const thumb = await resolveCoverThumb(root, abs)
+          filePath = thumb.absPath
+          type = thumb.mime
+        } catch {
+          /* fall back to original */
+        }
+      }
+
+      const data = await readFile(filePath)
       return new Response(new Uint8Array(data), {
         status: 200,
         headers: {
           'Content-Type': type,
           'Content-Length': String(data.byteLength),
-          'Cache-Control': 'public, max-age=3600',
+          // Thumbs are content-addressed by mtime/size — cache aggressively.
+          'Cache-Control': wantThumb
+            ? 'public, max-age=31536000, immutable'
+            : 'public, max-age=3600',
         },
       })
     } catch {
@@ -201,7 +240,7 @@ export function registerIpc(): void {
     const prevDir = settings.wallpaperEngineDir
     settings = await saveSettings(partial)
     await applyNetwork(settings.proxyUrl)
-    store = new LibraryStore(settings.downloadRoot)
+    bindLibraryStore(new LibraryStore(settings.downloadRoot))
     await store.ensureRoot()
     rebuildQueue()
     if (
@@ -222,7 +261,7 @@ export function registerIpc(): void {
     })
     if (result.canceled || !result.filePaths[0]) return null
     settings = await saveSettings({ downloadRoot: result.filePaths[0] })
-    store = new LibraryStore(settings.downloadRoot)
+    bindLibraryStore(new LibraryStore(settings.downloadRoot))
     await store.ensureRoot()
     rebuildQueue()
     scheduleWallpaperSync()
@@ -256,6 +295,7 @@ export function registerIpc(): void {
       store,
       settings.wallpaperEngineDir,
       settings.wallpaperMediaPort || DEFAULT_MEDIA_PORT,
+      playlistStore,
     )
     const path = await installWallpaperMediaStartup(settings.wallpaperEngineDir)
     await ensureMediaServer()
@@ -275,6 +315,47 @@ export function registerIpc(): void {
     return store.search(query ?? '', { favoriteOnly: Boolean(favoriteOnly) })
   })
 
+  ipcMain.handle('playlists:list', async () => playlistStore.list())
+
+  ipcMain.handle('playlists:create', async (_e, name: string) => {
+    const pl = await playlistStore.create(name)
+    scheduleWallpaperSync()
+    return pl
+  })
+
+  ipcMain.handle('playlists:rename', async (_e, id: string, name: string) => {
+    const pl = await playlistStore.rename(id, name)
+    scheduleWallpaperSync()
+    return pl
+  })
+
+  ipcMain.handle('playlists:delete', async (_e, id: string) => {
+    await playlistStore.delete(id)
+    scheduleWallpaperSync()
+  })
+
+  ipcMain.handle(
+    'playlists:setMembers',
+    async (_e, id: string, refs: Array<{ source: string; galleryId: string }>) => {
+      const pl = await playlistStore.setMembers(id, refs)
+      scheduleWallpaperSync()
+      return pl
+    },
+  )
+
+  ipcMain.handle(
+    'playlists:addToPlaylists',
+    async (
+      _e,
+      playlistIds: string[],
+      ref: { source: string; galleryId: string },
+    ) => {
+      const n = await playlistStore.addToPlaylists(playlistIds, ref)
+      if (n > 0) scheduleWallpaperSync()
+      return n
+    },
+  )
+
   ipcMain.handle('library:get', async (_e, source: string, id: string) => {
     return store.getGallery(source, id)
   })
@@ -287,6 +368,7 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:delete', async (_e, source: string, id: string) => {
     await store.deleteGallery(source, id)
+    await playlistStore.pruneMissing(await store.loadIndex())
     scheduleWallpaperSync()
   })
 
@@ -294,6 +376,7 @@ export function registerIpc(): void {
     'library:deleteMany',
     async (_e, refs: Array<{ source: string; galleryId: string }>) => {
       const n = await store.deleteGalleries(refs)
+      await playlistStore.pruneMissing(await store.loadIndex())
       scheduleWallpaperSync()
       return n
     },
@@ -381,6 +464,8 @@ export function registerIpc(): void {
       payload: {
         zipPath: string
         deleteZip?: boolean
+        password?: string
+        intoExisting?: boolean
         source?: string
         galleryId?: string
         title?: string
@@ -395,12 +480,33 @@ export function registerIpc(): void {
         sourceUrl: payload.sourceUrl ?? payload.zipPath,
         author: payload.author,
         deleteZip: payload.deleteZip,
+        password: payload.password,
+        intoExisting: payload.intoExisting,
       }
-      const meta = await extractZipToGallery(payload.zipPath, store, opts)
-      scheduleWallpaperSync()
-      return meta
+      try {
+        const meta = await extractZipToGallery(payload.zipPath, store, opts)
+        scheduleWallpaperSync()
+        return meta
+      } catch (err) {
+        if (err instanceof ZipPasswordRequiredError) {
+          throw new Error(err.message)
+        }
+        throw err
+      }
     },
   )
+
+  ipcMain.handle('library:listZipFiles', async (_e, source: string, id: string) => {
+    const meta = await store.getGallery(source, id)
+    if (!meta) return [] as string[]
+    const dir = store.resolveGalleryDir(meta.source, meta.galleryId, meta.title)
+    const { resolveZipArtifacts } = await import('./library/extractZipGallery')
+    const { zipNames, renamedMeta } = await resolveZipArtifacts(dir, meta.images)
+    if (renamedMeta) {
+      await store.upsertGallery({ ...meta, images: renamedMeta })
+    }
+    return zipNames.map((name) => join(dir, name))
+  })
 
   ipcMain.handle(
     'queue:enqueue',

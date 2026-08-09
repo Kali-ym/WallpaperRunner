@@ -18,6 +18,13 @@ function formatSpeed(bps?: number): string {
   return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`
 }
 
+function formatBytes(n?: number): string {
+  if (n == null || n < 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function formatEta(sec?: number | null): string {
   if (sec == null || sec < 0) return ''
   if (sec < 60) return `约 ${sec}s`
@@ -40,11 +47,26 @@ export type QueueTaskRowProps = {
 
 export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const percent = task.percent ?? (task.total > 0 ? Math.round((task.done / task.total) * 100) : 0)
+  const percent =
+    task.percent ??
+    (task.bytesTotal && task.bytesTotal > 0 && task.bytesReceived != null
+      ? Math.round((task.bytesReceived / task.bytesTotal) * 100)
+      : task.total > 0
+        ? Math.round((task.done / task.total) * 100)
+        : 0)
   const canCancel =
     task.status === 'queued' || task.status === 'resolving' || task.status === 'downloading'
   const speed = formatSpeed(task.bytesPerSec)
   const eta = formatEta(task.etaSec)
+  const sizeLabel =
+    task.bytesReceived != null && (task.status === 'downloading' || task.status === 'completed')
+      ? task.bytesTotal && task.bytesTotal > 0
+        ? `${formatBytes(task.bytesReceived)}/${formatBytes(task.bytesTotal)}`
+        : formatBytes(task.bytesReceived)
+      : ''
+  const showBar =
+    (task.status === 'downloading' || task.status === 'resolving') &&
+    (Boolean(task.bytesTotal && task.bytesTotal > 0) || task.total > 0)
 
   return (
     <li className={`task-item status-${task.status}`}>
@@ -59,15 +81,25 @@ export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX
         </div>
         <div className="task-meta muted">
           <span>{statusLabel[task.status]}</span>
-          {task.total > 0 ? (
+          {sizeLabel ? (
             <span className="mono-num">
-              · {task.done}/{task.total} · {percent}%
+              · {sizeLabel}
+              {task.bytesTotal && task.bytesTotal > 0 ? ` · ${percent}%` : ''}
+            </span>
+          ) : task.total > 0 ? (
+            <span className="mono-num">
+              · {task.done}/{task.total}
+            </span>
+          ) : null}
+          {task.total > 0 && sizeLabel ? (
+            <span className="mono-num">
+              · {task.done}/{task.total} 文件
             </span>
           ) : null}
           {speed ? <span className="mono-num"> · {speed}</span> : null}
           {eta && task.status === 'downloading' ? <span className="mono-num"> · {eta}</span> : null}
         </div>
-        {(task.status === 'downloading' || task.status === 'resolving') && task.total > 0 ? (
+        {showBar ? (
           <div className="progress-track" aria-hidden>
             <div className="progress-fill" style={{ transform: `scaleX(${percent / 100})` }} />
           </div>
@@ -79,6 +111,13 @@ export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX
               <li key={f.id} className={`task-file status-${f.status}`}>
                 <span>{f.name}</span>
                 <span className="muted">{fileStatusLabel[f.status] ?? f.status}</span>
+                {f.bytesReceived != null || f.bytesTotal != null ? (
+                  <span className="mono-num muted">
+                    {f.bytesTotal && f.bytesTotal > 0
+                      ? `${formatBytes(f.bytesReceived ?? 0)}/${formatBytes(f.bytesTotal)}`
+                      : formatBytes(f.bytesReceived)}
+                  </span>
+                ) : null}
                 {f.error ? <span className="error-text">{f.error}</span> : null}
               </li>
             ))}

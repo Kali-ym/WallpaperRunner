@@ -1,0 +1,654 @@
+/** Static Wallpaper Engine Web project files written to the export directory. */
+
+export function buildProjectJson(playlists: { id: string; name: string }[]): string {
+  const options = [
+    { label: 'All galleries', value: 'all' },
+    { label: 'Favorites only', value: 'favorites' },
+    ...playlists.map((p) => ({
+      label: p.name.slice(0, 64) || p.id,
+      value: p.id,
+    })),
+  ]
+  const project = {
+    contentrating: 'Everyone',
+    description:
+      'Random gallery slideshow from local gallery-library. Works offline without the desktop app.',
+    file: 'index.html',
+    general: {
+      properties: {
+        schemecolor: {
+          order: 0,
+          text: 'ui_browse_properties_scheme_color',
+          type: 'color',
+          value: '0.1 0.1 0.1',
+        },
+        pool: {
+          order: 1,
+          text: 'Gallery pool',
+          type: 'combo',
+          value: 'all',
+          options,
+        },
+        intervalmin: {
+          order: 2,
+          text: 'Interval min (seconds)',
+          type: 'slider',
+          value: '3',
+          min: 1,
+          max: 30,
+          fraction: true,
+          precision: 1,
+        },
+        intervalmax: {
+          order: 3,
+          text: 'Interval max (seconds)',
+          type: 'slider',
+          value: '5',
+          min: 1,
+          max: 60,
+          fraction: true,
+          precision: 1,
+        },
+        landscapemode: {
+          order: 4,
+          text: 'Landscape fit',
+          type: 'combo',
+          value: 'smart',
+          options: [
+            { label: 'Smart', value: 'smart' },
+            { label: 'Cover (crop)', value: 'cover' },
+            { label: 'Contain (full)', value: 'contain' },
+          ],
+        },
+        portraitmode: {
+          order: 5,
+          text: 'Portrait layout',
+          type: 'combo',
+          value: 'multi',
+          options: [
+            { label: 'Smart multi (only if mismatch)', value: 'multi' },
+            { label: 'Tile same image', value: 'tile' },
+            { label: 'Single + blur', value: 'blur' },
+          ],
+        },
+        portraitcolumns: {
+          order: 6,
+          text: 'Portrait columns (0 = auto)',
+          type: 'slider',
+          value: '0',
+          min: 0,
+          max: 4,
+          fraction: false,
+        },
+      },
+      supportsaudioprocessing: false,
+    },
+    tags: ['Abstract'],
+    title: 'Gallery Library Slideshow',
+    type: 'web',
+    version: 1,
+    visibility: 'private',
+  }
+  return `${JSON.stringify(project, null, 2)}\n`
+}
+
+/** @deprecated Use buildProjectJson — kept for imports that expect a constant. */
+export const PROJECT_JSON = buildProjectJson([])
+
+
+export const INDEX_HTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gallery Library Slideshow</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a0a;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #ccc;
+    }
+    #stage {
+      position: fixed;
+      inset: 0;
+      background: #0a0a0a;
+    }
+    #stage .layer {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+    #stage .layer.visible {
+      opacity: 1;
+    }
+    #stage .bg-blur {
+      position: absolute;
+      inset: -4%;
+      background-size: cover;
+      background-position: center;
+      filter: blur(12px) brightness(0.72) saturate(0.92);
+      transform: scale(1.06);
+    }
+    #stage .bg-dim {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 8, 10, 0.18);
+      pointer-events: none;
+    }
+    #stage .row {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: 0;
+      z-index: 1;
+    }
+    #stage .cell {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 100%;
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    #stage .cell.contain {
+      background-size: contain;
+    }
+    #stage .cell.cover {
+      background-size: cover;
+    }
+    #stage .single {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    #stage .single.cover {
+      background-size: cover;
+    }
+    #status {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      font-size: 14px;
+      opacity: 0.95;
+      pointer-events: none;
+      text-shadow: 0 1px 4px #000, 0 0 12px #000;
+      max-width: 90%;
+      color: #f0f0f0;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="status"></div>
+  <script src="config.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
+`
+
+// Wallpaper Engine runs this in a Chromium CEF context (not TypeScript).
+export const MAIN_JS = String.raw`(() => {
+  'use strict';
+
+  const stage = document.getElementById('stage');
+  const statusEl = document.getElementById('status');
+
+  const state = {
+    pool: 'all',
+    intervalMin: 3,
+    intervalMax: 5,
+    landscapeMode: 'smart',
+    portraitMode: 'multi',
+    portraitColumns: 0,
+    mediaBase: (typeof window !== 'undefined' && window.__GALLERY_MEDIA_BASE__) || 'http://127.0.0.1:17989',
+    playlist: null,
+    playlistLoadedAt: 0,
+    lastGalleryId: null,
+    cursor: 0,
+    gallery: null,
+    timer: null,
+    front: null,
+    running: false,
+  };
+
+  function setStatus(msg) {
+    if (statusEl) statusEl.textContent = msg || '';
+  }
+
+  function pathToUrl(p) {
+    if (!p) return '';
+    if (/^https?:/i.test(p) || /^file:/i.test(p)) return p;
+    const s = String(p).replace(/\\/g, '/').replace(/^\/+/, '');
+    const encoded = s.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    return state.mediaBase.replace(/\/$/, '') + '/media/' + encoded;
+  }
+
+  function randBetween(a, b) {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    return lo + Math.random() * (hi - lo);
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => {
+      state.timer = setTimeout(resolve, ms);
+    });
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('load failed'));
+      img.src = url;
+    });
+  }
+
+  function isPortrait(img, screenW, screenH) {
+    const ir = img.naturalWidth / img.naturalHeight;
+    const sr = screenW / screenH;
+    return ir < sr * 0.9 && ir < 0.95;
+  }
+
+  /** Width fill ratio if image is fitted to full screen height (contain-by-height). */
+  function heightFitWidthRatio(img, screenW, screenH) {
+    const fittedW = screenH * (img.naturalWidth / img.naturalHeight);
+    return fittedW / screenW;
+  }
+
+  /**
+   * Only use multi-panel when a single image leaves large empty sides
+   * (clear portrait-vs-ultrawide / tall mismatch). Mild mismatch → single + blur.
+   */
+  function shouldUseMulti(img, screenW, screenH) {
+    const fill = heightFitWidthRatio(img, screenW, screenH);
+    return fill < 0.58;
+  }
+
+  function suggestedColumns(img, screenW, screenH) {
+    if (state.portraitColumns > 0) return state.portraitColumns;
+    const fill = heightFitWidthRatio(img, screenW, screenH);
+    if (fill < 0.38) return screenW >= 2560 ? 3 : 2;
+    return 2;
+  }
+
+  function autoColumns(screenW) {
+    if (screenW >= 2560) return 3;
+    if (screenW >= 1600) return 2;
+    return 2;
+  }
+
+  function getPoolGalleries() {
+    const list = (state.playlist && state.playlist.galleries) || [];
+    const withImages = list.filter((g) => g.images && g.images.length);
+    const pool = String(state.pool || 'all');
+    if (pool === 'favorites') {
+      return withImages.filter((g) => g.favorite);
+    }
+    if (pool.indexOf('pl_') === 0) {
+      const pls = (state.playlist && state.playlist.playlists) || [];
+      const pl = pls.find((p) => p.id === pool);
+      if (!pl) return [];
+      const allow = {};
+      for (let i = 0; i < (pl.galleryIds || []).length; i++) {
+        allow[pl.galleryIds[i]] = true;
+      }
+      return withImages.filter((g) => allow[g.id]);
+    }
+    return withImages;
+  }
+
+  function seenStorageKey(pool) {
+    return 'gallerySeen:' + String(pool || 'all');
+  }
+
+  function loadSeen(pool) {
+    try {
+      const raw = localStorage.getItem(seenStorageKey(pool));
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveSeen(pool, ids) {
+    try {
+      localStorage.setItem(seenStorageKey(pool), JSON.stringify(ids));
+    } catch (e) {
+      /* ignore quota */
+    }
+  }
+
+  function markGallerySeen(pool, id) {
+    if (!id) return;
+    const seen = loadSeen(pool);
+    if (seen.indexOf(id) >= 0) return;
+    seen.push(id);
+    saveSeen(pool, seen);
+  }
+
+  function pickGallery(pool) {
+    if (!pool.length) return null;
+    const poolKey = String(state.pool || 'all');
+    const alive = {};
+    for (let i = 0; i < pool.length; i++) alive[pool[i].id] = true;
+    let seen = loadSeen(poolKey).filter((id) => alive[id]);
+    let unseen = pool.filter((g) => seen.indexOf(g.id) < 0);
+    if (!unseen.length) {
+      seen = [];
+      saveSeen(poolKey, seen);
+      unseen = pool.slice();
+    }
+    if (unseen.length === 1) return unseen[0];
+    let g = unseen[Math.floor(Math.random() * unseen.length)];
+    let guard = 0;
+    while (g.id === state.lastGalleryId && guard < 6) {
+      g = unseen[Math.floor(Math.random() * unseen.length)];
+      guard += 1;
+    }
+    return g;
+  }
+
+  function clearTimer() {
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+  }
+
+  function showLayer(nodes) {
+    const layer = document.createElement('div');
+    layer.className = 'layer';
+    for (const n of nodes) layer.appendChild(n);
+    stage.appendChild(layer);
+    requestAnimationFrame(() => layer.classList.add('visible'));
+    if (state.front) {
+      const prev = state.front;
+      prev.classList.remove('visible');
+      setTimeout(() => prev.remove(), 400);
+    }
+    state.front = layer;
+  }
+
+  function makeBlurBg(url) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;inset:0;z-index:0;overflow:hidden;';
+    const el = document.createElement('div');
+    el.className = 'bg-blur';
+    el.style.backgroundImage = 'url("' + url.replace(/"/g, '\\"') + '")';
+    const dim = document.createElement('div');
+    dim.className = 'bg-dim';
+    wrap.appendChild(el);
+    wrap.appendChild(dim);
+    return wrap;
+  }
+
+  function renderSingle(url, img, modeLandscape) {
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const ir = img.naturalWidth / img.naturalHeight;
+    const sr = screenW / screenH;
+    let fit = modeLandscape || 'smart';
+    if (fit === 'smart') {
+      // Never crop top/bottom: cover only when image is wider than the screen aspect
+      fit = ir >= sr ? 'cover' : 'contain';
+    } else if (fit === 'cover' && ir < sr) {
+      // Forced cover would crop vertically — fall back to contain
+      fit = 'contain';
+    }
+    const nodes = [];
+    if (fit === 'contain') nodes.push(makeBlurBg(url));
+    const single = document.createElement('div');
+    single.className = 'single' + (fit === 'cover' ? ' cover' : '');
+    single.style.backgroundImage = 'url("' + url.replace(/"/g, '\\"') + '")';
+    single.style.zIndex = '1';
+    nodes.push(single);
+    showLayer(nodes);
+  }
+
+  function renderTile(url) {
+    const cols = state.portraitColumns > 0 ? state.portraitColumns : autoColumns(window.innerWidth);
+    const nodes = [makeBlurBg(url)];
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (let i = 0; i < cols; i += 1) {
+      const cell = document.createElement('div');
+      cell.className = 'cell contain';
+      cell.style.backgroundImage = 'url("' + url.replace(/"/g, '\\"') + '")';
+      row.appendChild(cell);
+    }
+    nodes.push(row);
+    showLayer(nodes);
+  }
+
+  function renderMulti(urls) {
+    const nodes = [makeBlurBg(urls[0])];
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const url of urls) {
+      const cell = document.createElement('div');
+      // contain = full image height visible, no vertical crop
+      cell.className = 'cell contain';
+      cell.style.backgroundImage = 'url("' + url.replace(/"/g, '\\"') + '")';
+      row.appendChild(cell);
+    }
+    nodes.push(row);
+    showLayer(nodes);
+  }
+
+  async function loadPlaylist(force) {
+    const now = Date.now();
+    if (!force && state.playlist && now - state.playlistLoadedAt < 45000) {
+      return state.playlist;
+    }
+    const base = state.mediaBase.replace(/\/$/, '');
+    try {
+      const res = await fetch(base + '/playlist.json?_=' + now, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      state.playlist = await res.json();
+      if (state.playlist.mediaBase) state.mediaBase = state.playlist.mediaBase;
+      state.playlistLoadedAt = now;
+      const n = (state.playlist.galleries || []).length;
+      if (!n) {
+        setStatus('playlist 为空：请在图库应用设置里点「立即同步」');
+      }
+      return state.playlist;
+    } catch (err) {
+      setStatus(
+        '媒体服务未启动 (' +
+          base +
+          ')：请打开图库应用，或运行 we-media-server。' +
+          (err && err.message ? ' ' + err.message : ''),
+      );
+      return state.playlist;
+    }
+  }
+
+  async function showFrameFromGallery() {
+    const g = state.gallery;
+    if (!g || !g.images || state.cursor >= g.images.length) return false;
+
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    const firstPath = g.images[state.cursor];
+    const firstUrl = pathToUrl(firstPath);
+
+    let img;
+    try {
+      img = await loadImage(firstUrl);
+    } catch {
+      state.cursor += 1;
+      return showFrameFromGallery();
+    }
+
+    const portrait = isPortrait(img, screenW, screenH);
+
+    if (!portrait) {
+      renderSingle(firstUrl, img, state.landscapeMode);
+      state.cursor += 1;
+      return true;
+    }
+
+    if (state.portraitMode === 'tile') {
+      renderTile(firstUrl);
+      state.cursor += 1;
+      return true;
+    }
+
+    if (state.portraitMode === 'blur') {
+      const nodes = [makeBlurBg(firstUrl)];
+      const single = document.createElement('div');
+      single.className = 'single';
+      single.style.backgroundImage = 'url("' + firstUrl.replace(/"/g, '\\"') + '")';
+      nodes.push(single);
+      showLayer(nodes);
+      state.cursor += 1;
+      return true;
+    }
+
+    // multi (default): only when mismatch is large; otherwise single + blur/cover
+    if (!shouldUseMulti(img, screenW, screenH)) {
+      renderSingle(firstUrl, img, 'smart');
+      state.cursor += 1;
+      return true;
+    }
+
+    const cols = suggestedColumns(img, screenW, screenH);
+    const urls = [firstUrl];
+    let advanced = 1;
+    for (let i = 1; i < cols; i += 1) {
+      const idx = state.cursor + i;
+      if (idx >= g.images.length) break;
+      const u = pathToUrl(g.images[idx]);
+      try {
+        const im = await loadImage(u);
+        if (!shouldUseMulti(im, screenW, screenH)) break;
+        urls.push(u);
+        advanced += 1;
+      } catch {
+        break;
+      }
+    }
+
+    if (urls.length === 1) {
+      // not enough siblings — single with blur, or tile if still very narrow
+      if (heightFitWidthRatio(img, screenW, screenH) < 0.45) {
+        renderTile(firstUrl);
+      } else {
+        renderSingle(firstUrl, img, 'smart');
+      }
+    } else {
+      renderMulti(urls);
+    }
+    state.cursor += advanced;
+    return true;
+  }
+
+  async function runLoop() {
+    if (state.running) return;
+    state.running = true;
+    setStatus('加载播放列表…');
+    await loadPlaylist(true);
+
+    while (state.running) {
+      await loadPlaylist(false);
+      const pool = getPoolGalleries();
+      if (!pool.length) {
+        setStatus('播放池为空：下载套图，或把「Gallery pool」从 Favorites 改成 All');
+        await sleep(5000);
+        await loadPlaylist(true);
+        continue;
+      }
+
+      const g = pickGallery(pool);
+      if (!g) {
+        await sleep(3000);
+        continue;
+      }
+
+      state.gallery = g;
+      state.lastGalleryId = g.id;
+      state.cursor = 0;
+      setStatus('加载中：' + (g.title || g.id));
+
+      let shown = 0;
+      while (state.cursor < g.images.length) {
+        const ok = await showFrameFromGallery();
+        if (!ok) break;
+        shown += 1;
+        if (shown === 1) setStatus('');
+        const waitMs = randBetween(state.intervalMin, state.intervalMax) * 1000;
+        await sleep(waitMs);
+      }
+      markGallerySeen(String(state.pool || 'all'), g.id);
+      if (!shown) {
+        setStatus('图片加载失败（检查 library 联接）：' + (g.title || g.id));
+        await sleep(2000);
+      }
+    }
+  }
+
+  function clampInterval() {
+    if (state.intervalMin > state.intervalMax) {
+      const t = state.intervalMin;
+      state.intervalMin = state.intervalMax;
+      state.intervalMax = t;
+    }
+  }
+
+  window.wallpaperPropertyListener = {
+    applyUserProperties: function (properties) {
+      if (properties.pool && properties.pool.value !== undefined) {
+        const next = String(properties.pool.value);
+        const pls = (state.playlist && state.playlist.playlists) || [];
+        if (next.indexOf('pl_') === 0 && !pls.some((p) => p.id === next)) {
+          state.pool = 'all';
+        } else {
+          state.pool = next;
+        }
+      }
+      if (properties.intervalmin && properties.intervalmin.value !== undefined) {
+        state.intervalMin = Math.max(0.5, Number(properties.intervalmin.value) || 3);
+      }
+      if (properties.intervalmax && properties.intervalmax.value !== undefined) {
+        state.intervalMax = Math.max(0.5, Number(properties.intervalmax.value) || 5);
+      }
+      if (properties.landscapemode && properties.landscapemode.value !== undefined) {
+        state.landscapeMode = String(properties.landscapemode.value);
+      }
+      if (properties.portraitmode && properties.portraitmode.value !== undefined) {
+        state.portraitMode = String(properties.portraitmode.value);
+      }
+      if (properties.portraitcolumns && properties.portraitcolumns.value !== undefined) {
+        state.portraitColumns = Math.max(0, Math.min(4, Math.floor(Number(properties.portraitcolumns.value) || 0)));
+      }
+      clampInterval();
+    },
+  };
+
+  window.addEventListener('resize', () => {
+    /* next frame uses new size */
+  });
+
+  function start() {
+    void runLoop();
+  }
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
+})();
+`

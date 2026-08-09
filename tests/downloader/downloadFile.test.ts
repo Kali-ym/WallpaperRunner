@@ -24,6 +24,13 @@ describe('downloadFile helpers', () => {
   it('extensionFromUrlOrType prefers url then content-type', () => {
     expect(extensionFromUrlOrType('https://a/x.PNG', null)).toBe('.png')
     expect(extensionFromUrlOrType('https://a/x', 'image/webp')).toBe('.webp')
+    expect(extensionFromUrlOrType('https://a/pack.zip', null)).toBe('.zip')
+    expect(extensionFromUrlOrType('https://a/x', 'application/zip')).toBe('.zip')
+  })
+
+  it('extensionFromMagic detects zip header', async () => {
+    const { extensionFromMagic } = await import('@main/downloader/downloadFile')
+    expect(extensionFromMagic(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]))).toBe('.zip')
   })
 
   it('writes bytes from fetch', async () => {
@@ -45,5 +52,45 @@ describe('downloadFile helpers', () => {
     expect(result.bytes).toBe(2048)
     const written = await readFile(dest)
     expect(Buffer.compare(written, bytes)).toBe(0)
+  })
+
+  it('reports stream progress when body reader is available', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dl-prog-'))
+    dirs.push(root)
+    const dest = join(root, 'pack.bin')
+    const part1 = Buffer.alloc(1500, 2)
+    const part2 = Buffer.alloc(1500, 3)
+    const chunks = [part1, part2]
+    let i = 0
+    const events: { received: number; total: number | null }[] = []
+
+    vi.mocked(httpFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: (k: string) => (k.toLowerCase() === 'content-length' ? '3000' : 'application/octet-stream'),
+      },
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (i >= chunks.length) return { done: true, value: undefined }
+            const value = chunks[i++]
+            return { done: false, value }
+          },
+          cancel: async () => undefined,
+          releaseLock: () => undefined,
+        }),
+      },
+      arrayBuffer: async () => Buffer.concat(chunks),
+    } as unknown as Response)
+
+    const result = await downloadFile('https://example.com/pack.rar', dest, {
+      retries: 1,
+      onProgress: (p) => events.push({ ...p }),
+    })
+    expect(result.bytes).toBe(3000)
+    expect(events.length).toBeGreaterThan(0)
+    expect(events[events.length - 1]?.received).toBe(3000)
+    expect(events.some((e) => e.total === 3000)).toBe(true)
   })
 })

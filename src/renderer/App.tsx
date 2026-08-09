@@ -3,16 +3,16 @@ import LibraryPage from './pages/LibraryPage'
 import GalleryPage from './pages/GalleryPage'
 import DownloadPage from './pages/DownloadPage'
 import SettingsPage from './pages/SettingsPage'
+import PlaylistsPage from './pages/PlaylistsPage'
 import ToastHost from './components/Toast'
-import { ToastProvider, useToast } from './lib/toast'
+import { ToastProvider } from './lib/toast'
 import type { LibraryIndexEntry } from './lib/api'
 
-type Tab = 'library' | 'download' | 'settings'
+type Tab = 'library' | 'playlists' | 'download' | 'settings'
 
 function AppShell(): JSX.Element {
   const [tab, setTab] = useState<Tab>('library')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
-  const toast = useToast()
 
   return (
     <div className="app-shell">
@@ -31,6 +31,16 @@ function AppShell(): JSX.Element {
             }}
           >
             库
+          </button>
+          <button
+            type="button"
+            className={tab === 'playlists' && !active ? 'nav-btn active' : 'nav-btn'}
+            onClick={() => {
+              setActive(null)
+              setTab('playlists')
+            }}
+          >
+            播放列表
           </button>
           <button
             type="button"
@@ -62,13 +72,35 @@ function AppShell(): JSX.Element {
             onBack={() => setActive(null)}
             onDeleted={() => setActive(null)}
           />
-        ) : tab === 'library' ? (
+        ) : null}
+        <div
+          className="tab-panel"
+          hidden={Boolean(active) || tab !== 'library'}
+          style={{ display: active || tab !== 'library' ? 'none' : undefined }}
+        >
           <LibraryPage onOpenGallery={setActive} />
-        ) : tab === 'download' ? (
+        </div>
+        <div
+          className="tab-panel"
+          hidden={Boolean(active) || tab !== 'playlists'}
+          style={{ display: active || tab !== 'playlists' ? 'none' : undefined }}
+        >
+          <PlaylistsPage active={!active && tab === 'playlists'} />
+        </div>
+        <div
+          className="tab-panel"
+          hidden={Boolean(active) || tab !== 'download'}
+          style={{ display: active || tab !== 'download' ? 'none' : undefined }}
+        >
           <DownloadPage />
-        ) : (
+        </div>
+        <div
+          className="tab-panel"
+          hidden={Boolean(active) || tab !== 'settings'}
+          style={{ display: active || tab !== 'settings' ? 'none' : undefined }}
+        >
           <SettingsPage />
-        )}
+        </div>
       </main>
       <ToastHost />
     </div>

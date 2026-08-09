@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { mkdir, readdir, readFile, writeFile, access, rm, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { galleryFolderName } from './paths'
@@ -61,8 +62,12 @@ function toIndexEntry(meta: GalleryMetadata, dirName: string): LibraryIndexEntry
   }
 }
 
-export class LibraryStore {
-  constructor(private readonly rootDir: string) {}
+export class LibraryStore extends EventEmitter {
+  private indexCache: LibraryIndexEntry[] | null = null
+
+  constructor(private readonly rootDir: string) {
+    super()
+  }
 
   get root(): string {
     return this.rootDir
@@ -86,23 +91,33 @@ export class LibraryStore {
   }
 
   async loadIndex(): Promise<LibraryIndexEntry[]> {
+    if (this.indexCache) return this.indexCache
     await this.ensureRoot()
     try {
       const raw = await readFile(this.indexPath(), 'utf8')
       const parsed = JSON.parse(raw) as LibraryIndexFile
-      return (parsed.entries ?? []).map((e) => ({
+      this.indexCache = (parsed.entries ?? []).map((e) => ({
         ...e,
         favorite: Boolean(e.favorite),
       }))
+      return this.indexCache
     } catch {
-      return []
+      this.indexCache = []
+      return this.indexCache
     }
   }
 
   private async saveIndex(entries: LibraryIndexEntry[]): Promise<void> {
     await this.ensureRoot()
+    this.indexCache = entries
     const payload: LibraryIndexFile = { entries }
     await writeFile(this.indexPath(), JSON.stringify(payload, null, 2), 'utf8')
+    this.emit('change')
+  }
+
+  /** Drop in-memory index (e.g. after external edits). */
+  invalidateIndexCache(): void {
+    this.indexCache = null
   }
 
   private async findEntry(source: string, galleryId: string): Promise<LibraryIndexEntry | null> {
@@ -170,11 +185,13 @@ export class LibraryStore {
   }
 
   async rebuildIndex(): Promise<LibraryIndexEntry[]> {
+    this.indexCache = null
     await this.ensureRoot()
     const dirs = await readdir(this.rootDir, { withFileTypes: true })
     const entries: LibraryIndexEntry[] = []
     for (const d of dirs) {
       if (!d.isDirectory()) continue
+      if (d.name === '.thumbs') continue
       const meta = await this.readMetaAt(d.name)
       if (!meta) continue
       entries.push(toIndexEntry(meta, d.name))

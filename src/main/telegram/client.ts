@@ -116,9 +116,10 @@ export class TelegramService {
     }
 
     this.client = new TelegramClient(session, apiId, apiHash, {
-      connectionRetries: 5,
-      downloadRetries: 5,
-      requestRetries: 5,
+      connectionRetries: 10,
+      downloadRetries: 15,
+      requestRetries: 8,
+      retryDelay: 1500,
       proxy: proxy as never,
       useWSS: !proxy,
       autoReconnect: true,
@@ -267,6 +268,53 @@ export class TelegramService {
   async waitForLogin(): Promise<TelegramAuthStatus> {
     if (this.loginPromise) await this.loginPromise
     return this.getStatus()
+  }
+
+  /**
+   * Re-init MTProto after CONNECTION_NOT_INITED / dropped export DC during large downloads.
+   * Drops exported media DC senders, then reconnects the same client + session.
+   */
+  async recoverConnection(): Promise<void> {
+    if (!this.client) return
+    const client = this.client as TelegramClient & {
+      _exportedSenderPromises?: Map<number, Promise<unknown>>
+    }
+    try {
+      const map = client._exportedSenderPromises
+      if (map instanceof Map) {
+        const pending = [...map.values()]
+        map.clear()
+        await Promise.all(
+          pending.map(async (p) => {
+            try {
+              const sender = (await Promise.race([
+                p,
+                new Promise((r) => setTimeout(() => r(null), 1500)),
+              ])) as { disconnect?: () => Promise<void> } | null
+              await sender?.disconnect?.()
+            } catch {
+              /* ignore */
+            }
+          }),
+        )
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      await this.client.disconnect()
+    } catch {
+      /* ignore */
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+    await this.client.connect()
+    if (!(await this.client.checkAuthorization())) {
+      this.setStatus({ state: 'disconnected', error: '会话已失效，请重新登录' })
+      throw new Error('Telegram 会话已失效，请重新登录')
+    }
+    if (this.status.state !== 'authorized') {
+      this.setStatus({ state: 'authorized', error: undefined })
+    }
   }
 
   async disconnect(): Promise<void> {
