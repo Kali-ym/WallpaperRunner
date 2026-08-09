@@ -205,11 +205,23 @@ export class LibraryStore {
   }
 
   async renameGallery(source: string, galleryId: string, displayTitle: string): Promise<GalleryMetadata> {
+    return this.updateGalleryMeta(source, galleryId, { displayTitle })
+  }
+
+  async updateGalleryMeta(
+    source: string,
+    galleryId: string,
+    partial: { displayTitle?: string; author?: string; tags?: string[] },
+  ): Promise<GalleryMetadata> {
     const hit = await this.findEntry(source, galleryId)
     if (!hit) throw new Error('套图不存在')
     const meta = await this.readMetaAt(hit.dirName)
     if (!meta) throw new Error('元数据缺失')
-    meta.displayTitle = displayTitle.trim()
+    if (partial.displayTitle !== undefined) meta.displayTitle = partial.displayTitle.trim()
+    if (partial.author !== undefined) meta.author = partial.author.trim()
+    if (partial.tags !== undefined) {
+      meta.tags = partial.tags.map((t) => t.trim()).filter(Boolean)
+    }
     await this.writeMetaAt(hit.dirName, meta)
     const entries = await this.loadIndex()
     const idx = entries.findIndex((e) => e.source === source && e.galleryId === galleryId)

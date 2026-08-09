@@ -309,6 +309,20 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle(
+    'library:updateMeta',
+    async (
+      _e,
+      source: string,
+      id: string,
+      partial: { displayTitle?: string; author?: string; tags?: string[] },
+    ) => {
+      const meta = await store.updateGalleryMeta(source, id, partial)
+      scheduleWallpaperSync()
+      return meta
+    },
+  )
+
+  ipcMain.handle(
     'library:setFavorite',
     async (_e, source: string, id: string, favorite: boolean) => {
       const meta = await store.setFavorite(source, id, favorite)

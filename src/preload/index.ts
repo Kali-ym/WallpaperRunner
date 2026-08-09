@@ -27,6 +27,11 @@ const api = {
     ipcRenderer.invoke('library:deleteMany', refs),
   renameGallery: (source: string, id: string, displayTitle: string): Promise<GalleryMetadata> =>
     ipcRenderer.invoke('library:rename', source, id, displayTitle),
+  updateGalleryMeta: (
+    source: string,
+    id: string,
+    partial: { displayTitle?: string; author?: string; tags?: string[] },
+  ): Promise<GalleryMetadata> => ipcRenderer.invoke('library:updateMeta', source, id, partial),
   setFavorite: (source: string, id: string, favorite: boolean): Promise<GalleryMetadata> =>
     ipcRenderer.invoke('library:setFavorite', source, id, favorite),
   setFavorites: (refs: GalleryRef[], favorite: boolean): Promise<number> =>
