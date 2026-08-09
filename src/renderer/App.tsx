@@ -3,13 +3,16 @@ import LibraryPage from './pages/LibraryPage'
 import GalleryPage from './pages/GalleryPage'
 import DownloadPage from './pages/DownloadPage'
 import SettingsPage from './pages/SettingsPage'
+import ToastHost from './components/Toast'
+import { ToastProvider, useToast } from './lib/toast'
 import type { LibraryIndexEntry } from './lib/api'
 
 type Tab = 'library' | 'download' | 'settings'
 
-export default function App(): JSX.Element {
+function AppShell(): JSX.Element {
   const [tab, setTab] = useState<Tab>('library')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
+  const toast = useToast()
 
   return (
     <div className="app-shell">
@@ -18,7 +21,7 @@ export default function App(): JSX.Element {
           <h1>套图库</h1>
           <p className="muted">本地套图下载与查看器</p>
         </div>
-        <nav className="nav">
+        <nav className="nav" aria-label="主导航">
           <button
             type="button"
             className={tab === 'library' && !active ? 'nav-btn active' : 'nav-btn'}
@@ -67,6 +70,15 @@ export default function App(): JSX.Element {
           <SettingsPage />
         )}
       </main>
+      <ToastHost />
     </div>
+  )
+}
+
+export default function App(): JSX.Element {
+  return (
+    <ToastProvider>
+      <AppShell />
+    </ToastProvider>
   )
 }
