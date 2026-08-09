@@ -5,7 +5,9 @@ import { downloadGallery, GalleryExistsError } from '../downloader/downloadGalle
 import { fetchHtml } from '../downloader/fetchHtml'
 import type { LibraryStore } from '../library/store'
 import { getResourceManifest, deleteResourceManifest } from '../resources/session'
+import { listManifestItems } from '../resources/types'
 import { telegramService } from '../telegram/client'
+import { computeEtaSec, computePercent, RateTracker, type QueueFileProgress } from './progress'
 import type { QueueProgress, QueueTask, QueueTaskStatus } from './types'
 
 export interface DownloadQueueOptions {
@@ -147,15 +149,58 @@ export class DownloadQueue extends EventEmitter {
     const task = this.tasks.find((t) => t.id === taskId)
     if (!task) return
     Object.assign(task, partial, { updatedAt: new Date().toISOString() })
+    if (partial.done !== undefined || partial.total !== undefined) {
+      task.percent = computePercent(task.done, task.total)
+    }
     const progress: QueueProgress = {
       taskId,
       status: task.status,
       done: task.done,
       total: task.total,
+      percent: task.percent,
+      bytesPerSec: task.bytesPerSec,
+      etaSec: task.etaSec,
+      files: task.files,
       error: task.error,
       title: task.title,
     }
     this.emit('progress', progress)
+  }
+
+  private mergeFileProgress(
+    taskId: string,
+    file: QueueFileProgress,
+    rates: { fileRate: RateTracker; byteRate: RateTracker; bytesTotal: { n: number } },
+    done: number,
+    total: number,
+    failed?: number,
+    bytesDelta?: number,
+  ): void {
+    const task = this.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const files = [...(task.files ?? [])]
+    const idx = files.findIndex((f) => f.id === file.id)
+    if (idx >= 0) files[idx] = { ...files[idx], ...file }
+    else files.push(file)
+
+    if (bytesDelta && bytesDelta > 0) {
+      rates.bytesTotal.n += bytesDelta
+    }
+    const filesPerSec = rates.fileRate.sample(done)
+    const bytesPerSec = rates.byteRate.sample(rates.bytesTotal.n)
+    const etaSec = computeEtaSec(done, total, filesPerSec)
+
+    this.patch(taskId, {
+      done,
+      total,
+      status: 'downloading',
+      files,
+      bytesPerSec: bytesPerSec > 0 ? Math.round(bytesPerSec) : undefined,
+      etaSec,
+      percent: computePercent(done, total),
+      error: failed ? `失败 ${failed}` : undefined,
+    })
+    this.emitUpdate()
   }
 
   private async pump(): Promise<void> {
@@ -216,24 +261,40 @@ export class DownloadQueue extends EventEmitter {
         title: parsed.title,
         total: parsed.images.length,
         done: 0,
+        percent: 0,
+        files: parsed.images.map((img, i) => ({
+          id: `img_${i}`,
+          name: String(i + 1).padStart(3, '0'),
+          status: 'pending' as const,
+        })),
       })
       this.emitUpdate()
 
       const existing = await this.opts.store.getGallery(parsed.source, parsed.galleryId)
       const overwrite = Boolean(task.overwrite || (existing && existing.images.length === 0))
+      const rates = {
+        fileRate: new RateTracker(),
+        byteRate: new RateTracker(),
+        bytesTotal: { n: 0 },
+      }
 
       await downloadGallery(parsed, this.opts.store, {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
-        onProgress: ({ done, total, failed }) => {
-          this.patch(task.id, {
-            done,
-            total,
-            status: 'downloading',
-            error: failed ? `失败 ${failed}` : undefined,
-          })
-          this.emitUpdate()
+        onProgress: ({ done, total, failed, file }) => {
+          if (file) {
+            this.mergeFileProgress(task.id, file, rates, done, total, failed)
+          } else {
+            this.patch(task.id, {
+              done,
+              total,
+              status: 'downloading',
+              percent: computePercent(done, total),
+              error: failed ? `失败 ${failed}` : undefined,
+            })
+            this.emitUpdate()
+          }
         },
       })
 
@@ -241,6 +302,8 @@ export class DownloadQueue extends EventEmitter {
         status: 'completed',
         done: parsed.images.length,
         total: parsed.images.length,
+        percent: 100,
+        etaSec: 0,
       })
       this.emitUpdate()
     } catch (err) {
@@ -265,6 +328,15 @@ export class DownloadQueue extends EventEmitter {
       title: stored.manifest.title,
       total: task.selectedIds!.length,
       done: 0,
+      percent: 0,
+      files: task.selectedIds!.map((id) => {
+        const item = listManifestItems(stored.manifest).find((i) => i.id === id)
+        return {
+          id,
+          name: item?.fileName || item?.label || id,
+          status: 'pending' as const,
+        }
+      }),
     })
     this.emitUpdate()
 
@@ -287,6 +359,12 @@ export class DownloadQueue extends EventEmitter {
       }
     }
 
+    const rates = {
+      fileRate: new RateTracker(),
+      byteRate: new RateTracker(),
+      bytesTotal: { n: 0 },
+    }
+
     const meta = await downloadSelectedResources(
       client,
       stored.manifest,
@@ -297,16 +375,34 @@ export class DownloadQueue extends EventEmitter {
         concurrency: this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
-        onProgress: ({ done, total, failed, lastError }) => {
-          this.patch(task.id, {
-            done,
-            total,
-            status: 'downloading',
-            error: failed
-              ? `失败 ${failed}${lastError ? ` · ${lastError}` : ''}`
-              : undefined,
-          })
-          this.emitUpdate()
+        onProgress: ({ done, total, failed, lastError, file, bytesDelta }) => {
+          if (file) {
+            this.mergeFileProgress(
+              task.id,
+              file,
+              rates,
+              done,
+              total,
+              failed,
+              bytesDelta,
+            )
+            if (lastError && failed) {
+              this.patch(task.id, {
+                error: `失败 ${failed} · ${lastError}`,
+              })
+            }
+          } else {
+            this.patch(task.id, {
+              done,
+              total,
+              status: 'downloading',
+              percent: computePercent(done, total),
+              error: failed
+                ? `失败 ${failed}${lastError ? ` · ${lastError}` : ''}`
+                : undefined,
+            })
+            this.emitUpdate()
+          }
         },
       },
     )
@@ -316,6 +412,8 @@ export class DownloadQueue extends EventEmitter {
       status: 'completed',
       done: meta.images.length,
       total: meta.images.length,
+      percent: 100,
+      etaSec: 0,
     })
     this.emitUpdate()
   }

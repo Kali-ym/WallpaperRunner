@@ -16,7 +16,12 @@ export interface DownloadGalleryOptions {
   concurrency: number
   signal?: AbortSignal
   overwrite?: boolean
-  onProgress?: (progress: { done: number; total: number; failed?: number }) => void
+  onProgress?: (progress: {
+    done: number
+    total: number
+    failed?: number
+    file?: { id: string; name: string; status: 'pending' | 'downloading' | 'done' | 'failed'; error?: string }
+  }) => void
 }
 
 async function mapPool<T, R>(
@@ -94,41 +99,77 @@ export async function downloadGallery(
 
   const settled = await mapPool(result.images, concurrency, async (img, index) => {
     if (opts.signal?.aborted) throw new Error('已取消')
+    const fileId = `img_${index}`
     const tentativeExt = extensionFromUrlOrType(img.url, null)
     const baseName = String(index + 1).padStart(3, '0')
-    const dest = join(dir, `${baseName}${tentativeExt}`)
-    const downloaded = await downloadFile(img.url, dest, {
-      signal: opts.signal,
-      // Prefer page referer for hotlink; fall back to gallery url
-      referer: result.sourceUrl.replace(/\.html$/i, '/1.html'),
-      retries: 4,
+    const name = `${baseName}${tentativeExt}`
+    opts.onProgress?.({
+      done,
+      total,
+      failed,
+      file: { id: fileId, name, status: 'downloading' },
     })
-    const finalExt = extensionFromUrlOrType(img.url, downloaded.contentType)
-    let finalName = `${baseName}${tentativeExt}`
-    if (finalExt !== tentativeExt) {
-      const renamed = join(dir, `${baseName}${finalExt}`)
-      const { rename, access } = await import('node:fs/promises')
-      await rename(dest, renamed)
-      finalName = `${baseName}${finalExt}`
-      await access(renamed)
-    } else {
-      const { access } = await import('node:fs/promises')
-      await access(dest)
+    try {
+      const dest = join(dir, name)
+      const downloaded = await downloadFile(img.url, dest, {
+        signal: opts.signal,
+        // Prefer page referer for hotlink; fall back to gallery url
+        referer: result.sourceUrl.replace(/\.html$/i, '/1.html'),
+        retries: 4,
+      })
+      const finalExt = extensionFromUrlOrType(img.url, downloaded.contentType)
+      let finalName = name
+      if (finalExt !== tentativeExt) {
+        const renamed = join(dir, `${baseName}${finalExt}`)
+        const { rename, access } = await import('node:fs/promises')
+        await rename(dest, renamed)
+        finalName = `${baseName}${finalExt}`
+        await access(renamed)
+      } else {
+        const { access } = await import('node:fs/promises')
+        await access(dest)
+      }
+      return { fileId, finalName }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      opts.onProgress?.({
+        done,
+        total,
+        failed,
+        file: { id: fileId, name, status: 'failed', error: msg },
+      })
+      throw err
     }
-    return finalName
   })
 
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i]
+    const fileId = `img_${i}`
     if (r.status === 'fulfilled') {
-      imageNames[i] = r.value
+      imageNames[i] = r.value.finalName
       done += 1
+      opts.onProgress?.({
+        done,
+        total,
+        failed,
+        file: { id: fileId, name: r.value.finalName, status: 'done' },
+      })
     } else {
       failed += 1
       const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
       errors.push(`${String(i + 1).padStart(3, '0')}: ${msg}`)
+      opts.onProgress?.({
+        done,
+        total,
+        failed,
+        file: {
+          id: fileId,
+          name: `${String(i + 1).padStart(3, '0')}`,
+          status: 'failed',
+          error: msg,
+        },
+      })
     }
-    opts.onProgress?.({ done, total, failed })
   }
 
   const saved = imageNames.filter((n): n is string => Boolean(n))
