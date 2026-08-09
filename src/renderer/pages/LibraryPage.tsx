@@ -161,6 +161,16 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
 
       {items.length === 0 && !loading ? (
         <p className="empty-hint">还没有套图。去「下载」页粘贴链接开始。</p>
+      ) : loading && items.length === 0 ? (
+        <div className="skeleton-grid" aria-hidden>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div className="skeleton-card" key={i}>
+              <div className="skeleton-cover" />
+              <div className="skeleton-line" />
+              <div className="skeleton-line short" />
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="gallery-grid">
           {items.map((entry) => (

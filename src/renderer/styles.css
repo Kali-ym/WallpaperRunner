@@ -820,6 +820,51 @@ textarea {
   margin-top: 24px;
 }
 
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.skeleton-card {
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.skeleton-cover {
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--line) 55%, var(--bg)) 0%,
+    color-mix(in srgb, var(--panel) 80%, var(--line)) 50%,
+    color-mix(in srgb, var(--line) 55%, var(--bg)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  margin: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--line) 70%, var(--bg));
+}
+
+.skeleton-line.short {
+  width: 40%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .settings-page .field {
   display: grid;
   gap: 8px;
