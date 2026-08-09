@@ -289,8 +289,9 @@ export default function SettingsPage(): JSX.Element {
       <section className="settings-section">
         <h3 className="settings-section-title">Wallpaper</h3>
         <p className="muted field-hint">
-          媒体端口 {settings.wallpaperMediaPort}。开机自启：{startupOn ? '已开启' : '未开启'}。
-          在 Wallpaper Engine 中导入工程目录的 index.html。
+          媒体端口 {settings.wallpaperMediaPort}。开机自启：{startupOn ? '已开启（后台无窗口）' : '未开启'}。
+          「立即同步」会写入工程目录，并自动覆盖 WE 已导入的 myprojects 副本。
+          首次只需导入一次 index.html；之后不必反复导入。
         </p>
         <label className="field">
           <span>WE 工程目录</span>
@@ -323,7 +324,11 @@ export default function SettingsPage(): JSX.Element {
             className="btn primary"
             onClick={() =>
               void api.syncWallpaper().then((r) => {
-                toast.success(`已同步 ${r.galleryCount} 套 / ${r.imageCount} 张`)
+                const extra =
+                  Array.isArray(r.mirroredDirs) && r.mirroredDirs.length > 0
+                    ? `，并更新了 WE 副本 ${r.mirroredDirs.length} 处`
+                    : '（未找到 WE 导入副本时，请先导入一次 index.html）'
+                toast.success(`已同步 ${r.galleryCount} 套 / ${r.imageCount} 张${extra}`)
               })
             }
           >

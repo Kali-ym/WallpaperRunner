@@ -214,16 +214,33 @@ export const MAIN_JS = String.raw`(() => {
     mediaBase: (typeof window !== 'undefined' && window.__GALLERY_MEDIA_BASE__) || 'http://127.0.0.1:17989',
     playlist: null,
     playlistLoadedAt: 0,
+    forcePlaylist: false,
     lastGalleryId: null,
     cursor: 0,
     gallery: null,
     timer: null,
     front: null,
     running: false,
+    /** Bumped to abort current gallery without marking it seen. */
+    skipToken: 0,
+    /** Pending sleep completer — must be called when skipping or await hangs forever. */
+    sleepDone: null,
   };
 
   function setStatus(msg) {
     if (statusEl) statusEl.textContent = msg || '';
+  }
+
+  function skipCurrentGallery() {
+    state.skipToken += 1;
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    // Do NOT null sleepDone before calling — finish() checks identity.
+    if (typeof state.sleepDone === 'function') {
+      state.sleepDone(false);
+    }
   }
 
   function pathToUrl(p) {
@@ -240,9 +257,23 @@ export const MAIN_JS = String.raw`(() => {
     return lo + Math.random() * (hi - lo);
   }
 
+  /** @returns {Promise<boolean>} true if sleep finished normally, false if aborted */
   function sleep(ms) {
     return new Promise((resolve) => {
-      state.timer = setTimeout(resolve, ms);
+      const token = state.skipToken;
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        if (state.sleepDone === finish) state.sleepDone = null;
+        if (state.timer) {
+          clearTimeout(state.timer);
+          state.timer = null;
+        }
+        resolve(Boolean(ok) && token === state.skipToken);
+      };
+      state.sleepDone = finish;
+      state.timer = setTimeout(() => finish(true), Math.max(0, ms));
     });
   }
 
@@ -292,7 +323,10 @@ export const MAIN_JS = String.raw`(() => {
   function getPoolGalleries() {
     const list = (state.playlist && state.playlist.galleries) || [];
     const withImages = list.filter((g) => g.images && g.images.length);
-    const pool = String(state.pool || 'all');
+    const pool = resolvePoolValue(state.pool);
+    // Keep normalized id so later logic sees pl_*
+    if (pool && pool !== state.pool) state.pool = pool;
+
     if (pool === 'favorites') {
       return withImages.filter((g) => g.favorite);
     }
@@ -306,7 +340,54 @@ export const MAIN_JS = String.raw`(() => {
       }
       return withImages.filter((g) => allow[g.id]);
     }
-    return withImages;
+    if (pool === 'all') return withImages;
+    // Unknown value must NOT fall through to "all"
+    return [];
+  }
+
+  function poolOptionsFromConfig() {
+    try {
+      const opts = window.__GALLERY_POOL_OPTIONS__;
+      return Array.isArray(opts) ? opts : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** Normalize WE combo value (id / label / numeric index). */
+  function resolvePoolValue(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return 'all';
+    if (s === 'all' || s === 'favorites' || s.indexOf('pl_') === 0) return s;
+    if (s === 'All galleries') return 'all';
+    if (s === 'Favorites only') return 'favorites';
+
+    const cfgOpts = poolOptionsFromConfig();
+    for (let i = 0; i < cfgOpts.length; i++) {
+      const o = cfgOpts[i];
+      if (!o) continue;
+      if (String(o.value) === s || String(o.label) === s) return String(o.value);
+    }
+    if (/^\d+$/.test(s) && cfgOpts[Number(s)] && cfgOpts[Number(s)].value != null) {
+      return String(cfgOpts[Number(s)].value);
+    }
+
+    const pls = (state.playlist && state.playlist.playlists) || [];
+    if (/^\d+$/.test(s)) {
+      const opts = ['all', 'favorites'].concat(pls.map((p) => p.id));
+      if (opts[Number(s)]) return opts[Number(s)];
+    }
+    const byName = pls.find((p) => p.name === s || p.id === s);
+    if (byName) return byName.id;
+    return s;
+  }
+
+  function poolLabel(pool) {
+    if (pool === 'all') return '全部';
+    if (pool === 'favorites') return '收藏';
+    const pls = (state.playlist && state.playlist.playlists) || [];
+    const pl = pls.find((p) => p.id === pool);
+    return (pl && pl.name) || pool;
   }
 
   function seenStorageKey(pool) {
@@ -450,7 +531,8 @@ export const MAIN_JS = String.raw`(() => {
 
   async function loadPlaylist(force) {
     const now = Date.now();
-    if (!force && state.playlist && now - state.playlistLoadedAt < 45000) {
+    // Short cache so app-side playlist edits apply quickly
+    if (!force && state.playlist && now - state.playlistLoadedAt < 8000) {
       return state.playlist;
     }
     const base = state.mediaBase.replace(/\/$/, '');
@@ -563,37 +645,77 @@ export const MAIN_JS = String.raw`(() => {
     await loadPlaylist(true);
 
     while (state.running) {
-      await loadPlaylist(false);
+      const token = state.skipToken;
+      const force = state.forcePlaylist;
+      state.forcePlaylist = false;
+      await loadPlaylist(force);
+
+      // Keep selected custom pool even if playlist was stale at click time
+      if (String(state.pool).indexOf('pl_') === 0) {
+        const pls = (state.playlist && state.playlist.playlists) || [];
+        if (!pls.some((p) => p.id === state.pool)) {
+          await loadPlaylist(true);
+        }
+      }
+
       const pool = getPoolGalleries();
       if (!pool.length) {
-        setStatus('播放池为空：下载套图，或把「Gallery pool」从 Favorites 改成 All');
-        await sleep(5000);
-        await loadPlaylist(true);
+        const p = String(state.pool || 'all');
+        if (p.indexOf('pl_') === 0) {
+          setStatus('播放列表「' + poolLabel(p) + '」为空或未同步：在应用里添加套图并点立即同步');
+        } else if (p === 'favorites') {
+          setStatus('收藏池为空：先在图库收藏套图');
+        } else {
+          setStatus('播放池为空：下载套图，或检查媒体服务');
+        }
+        const ok = await sleep(4000);
+        if (!ok || token !== state.skipToken) continue;
+        state.forcePlaylist = true;
         continue;
       }
 
       const g = pickGallery(pool);
       if (!g) {
-        await sleep(3000);
+        await sleep(2000);
         continue;
       }
 
       state.gallery = g;
       state.lastGalleryId = g.id;
       state.cursor = 0;
-      setStatus('加载中：' + (g.title || g.id));
+      setStatus('[' + poolLabel(state.pool) + '] ' + (g.title || g.id));
 
       let shown = 0;
+      let aborted = false;
       while (state.cursor < g.images.length) {
+        if (token !== state.skipToken) {
+          aborted = true;
+          break;
+        }
         const ok = await showFrameFromGallery();
         if (!ok) break;
         shown += 1;
         if (shown === 1) setStatus('');
         const waitMs = randBetween(state.intervalMin, state.intervalMax) * 1000;
-        await sleep(waitMs);
+        const stillSame = await sleep(waitMs);
+        if (!stillSame || token !== state.skipToken) {
+          aborted = true;
+          break;
+        }
+        await loadPlaylist(false);
+        // If pool membership changed mid-gallery, bail without marking seen
+        const stillInPool = getPoolGalleries().some((x) => x.id === g.id);
+        if (!stillInPool) {
+          aborted = true;
+          skipCurrentGallery();
+          break;
+        }
       }
-      markGallerySeen(String(state.pool || 'all'), g.id);
-      if (!shown) {
+
+      if (!aborted && token === state.skipToken) {
+        markGallerySeen(String(state.pool || 'all'), g.id);
+      }
+      if (!aborted && !shown) {
         setStatus('图片加载失败（检查 library 联接）：' + (g.title || g.id));
         await sleep(2000);
       }
@@ -608,16 +730,19 @@ export const MAIN_JS = String.raw`(() => {
     }
   }
 
+  function applyPoolSelection(raw) {
+    const next = resolvePoolValue(raw);
+    if (next === state.pool) return;
+    state.pool = next;
+    state.forcePlaylist = true;
+    skipCurrentGallery();
+    setStatus('切换播放池：' + poolLabel(next));
+  }
+
   window.wallpaperPropertyListener = {
     applyUserProperties: function (properties) {
-      if (properties.pool && properties.pool.value !== undefined) {
-        const next = String(properties.pool.value);
-        const pls = (state.playlist && state.playlist.playlists) || [];
-        if (next.indexOf('pl_') === 0 && !pls.some((p) => p.id === next)) {
-          state.pool = 'all';
-        } else {
-          state.pool = next;
-        }
+      if (properties.pool && properties.pool.value !== undefined && properties.pool.value !== null) {
+        applyPoolSelection(properties.pool.value);
       }
       if (properties.intervalmin && properties.intervalmin.value !== undefined) {
         state.intervalMin = Math.max(0.5, Number(properties.intervalmin.value) || 3);
