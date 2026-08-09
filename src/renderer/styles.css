@@ -826,6 +826,66 @@ textarea {
   margin-bottom: 18px;
 }
 
+.settings-section {
+  margin: 20px 0 28px;
+  padding: 18px 18px 8px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 2px);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.settings-section-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.settings-steps {
+  margin: 0 0 14px;
+  font-size: 0.88rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--line);
+}
+
+.status-badge.tone-ok {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.status-badge.tone-warn {
+  color: #a16207;
+  border-color: #e8d4a8;
+  background: #fff8eb;
+}
+
+.status-badge.tone-bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+}
+
+.status-badge.tone-muted {
+  color: var(--muted);
+}
+
 .settings-page .row {
   display: flex;
   gap: 8px;
