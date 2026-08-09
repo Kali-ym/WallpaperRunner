@@ -421,7 +421,13 @@ textarea {
 .cover-badge {
   left: auto !important;
   right: 8px;
+  top: 8px;
+  position: absolute;
   background: var(--accent) !important;
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 6px;
 }
 
 .lightbox {
@@ -516,15 +522,67 @@ textarea {
   display: block;
 }
 
-.thumb-item span {
+.thumb-caption {
   position: absolute;
   left: 8px;
-  top: 8px;
+  right: 8px;
+  bottom: 8px;
   background: rgba(28, 25, 21, 0.72);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   padding: 2px 6px;
   border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--line) 45%, var(--bg));
+}
+
+.archive-ext {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.thumb-wrap.is-archive .thumb-item {
+  cursor: default;
+}
+
+.overflow-wrap {
+  position: relative;
+}
+
+.overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 148px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+}
+
+.gallery-detail-head .page-title {
+  margin: 0;
+}
+
+.gallery-detail .thumb-item span:not(.cover-badge):not(.archive-ext):not(.thumb-caption) {
+  display: none;
 }
 
 .lightbox-nav {
@@ -708,9 +766,42 @@ textarea {
 .modal-root {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 70;
   display: grid;
   place-items: center;
+  padding: 24px;
+}
+
+.modal-root > .drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  padding: 22px 22px 18px;
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+}
+
+.modal-panel .text-input {
+  max-width: none;
+  width: 100%;
+}
+
+.modal-panel .field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
 }
 
 .field {
