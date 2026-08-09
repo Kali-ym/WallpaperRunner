@@ -10,6 +10,16 @@ const SOURCES: { id: DownloadSource; label: string }[] = [
   { id: 'telegraph', label: 'Telegraph' },
 ]
 
+type AskExtract = {
+  taskId: string
+  source: string
+  galleryId: string
+  title: string
+  sourceUrl: string
+  author?: string
+  zipPaths: string[]
+}
+
 function defaultIds(manifest: ResourceManifest): string[] {
   if (manifest.source === 'telegraph') return listItems(manifest).map((i) => i.id)
   return manifest.groups.post.map((i) => i.id)
@@ -24,10 +34,16 @@ export default function DownloadPage(): JSX.Element {
   const [error, setError] = useState('')
   const [manifest, setManifest] = useState<ResourceManifest | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [askExtract, setAskExtract] = useState<AskExtract | null>(null)
 
   useEffect(() => {
     void api.listTasks().then(setTasks)
-    return api.onQueueUpdate(setTasks)
+    const offQueue = api.onQueueUpdate(setTasks)
+    const offExtract = api.onAskExtract(setAskExtract)
+    return () => {
+      offQueue()
+      offExtract()
+    }
   }, [])
 
   async function parseUrls(): Promise<void> {
@@ -97,6 +113,32 @@ export default function DownloadPage(): JSX.Element {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function confirmExtract(extract: boolean): Promise<void> {
+    if (!askExtract) return
+    const payload = askExtract
+    setAskExtract(null)
+    if (!extract) {
+      toast.info('已保留压缩包')
+      return
+    }
+    try {
+      for (const zipPath of payload.zipPaths) {
+        await api.extractZip({
+          zipPath,
+          deleteZip: false,
+          source: payload.source,
+          galleryId: `${payload.galleryId}_extracted`,
+          title: `${payload.title}（解压）`,
+          sourceUrl: payload.sourceUrl,
+          author: payload.author,
+        })
+      }
+      toast.success('已解压入库')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -171,6 +213,26 @@ export default function DownloadPage(): JSX.Element {
             setError('')
           }}
         />
+      ) : null}
+
+      {askExtract ? (
+        <div className="modal-root" role="dialog" aria-modal="true" aria-label="解压询问">
+          <button type="button" className="drawer-backdrop" onClick={() => void confirmExtract(false)} />
+          <div className="modal-panel">
+            <h3 className="drawer-title">发现压缩包</h3>
+            <p className="muted">
+              「{askExtract.title}」包含 zip 文件。是否解压其中的图片并入库？
+            </p>
+            <div className="page-toolbar" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="btn" onClick={() => void confirmExtract(false)}>
+                仅保留压缩包
+              </button>
+              <button type="button" className="btn primary" onClick={() => void confirmExtract(true)}>
+                解压图片入库
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   )
