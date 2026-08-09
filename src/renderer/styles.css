@@ -171,6 +171,40 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+.source-seg {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 12px 0 4px;
+  border-radius: calc(var(--radius) + 2px);
+  background: color-mix(in srgb, var(--bg) 80%, var(--line));
+}
+
+.source-seg-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.source-seg-btn:hover {
+  color: var(--text);
+}
+
+.source-seg-btn.active {
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+}
+
 .toast-stack {
   position: fixed;
   right: 20px;

@@ -16,6 +16,10 @@ export function resolveAdapter(url: string): SourceAdapter | null {
   return adapters.find((a) => a.match(url)) ?? null
 }
 
+export function getAdapterById(id: string): SourceAdapter | null {
+  return adapters.find((a) => a.id === id) ?? null
+}
+
 export function listAdapters(): SourceAdapter[] {
   return [...adapters]
 }
