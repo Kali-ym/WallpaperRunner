@@ -23,6 +23,108 @@ function kindLabel(kind: string): string {
   return map[kind] ?? kind
 }
 
+function ItemRow({
+  item,
+  checked,
+  onToggle,
+}: {
+  item: PickerItem
+  checked: boolean
+  onToggle: (id: string) => void
+}): JSX.Element {
+  return (
+    <li>
+      <label className="resource-item">
+        <input type="checkbox" checked={checked} onChange={() => onToggle(item.id)} />
+        <span className="resource-thumb" aria-hidden>
+          {item.previewUrl ? (
+            <img src={item.previewUrl} alt="" />
+          ) : (
+            <span className="resource-thumb-ph">{kindLabel(item.kind).slice(0, 1)}</span>
+          )}
+        </span>
+        <span>
+          {item.label}
+          <span className="muted"> · {kindLabel(item.kind)}</span>
+          {item.fileName ? <span className="muted"> · {item.fileName}</span> : null}
+        </span>
+      </label>
+    </li>
+  )
+}
+
+function renderGroups(
+  groups: ResourceManifest['groups'],
+  selected: Set<string>,
+  onToggle: (id: string) => void,
+): JSX.Element {
+  return (
+    <>
+      {groups.post.length > 0 ? (
+        <div className="resource-group">
+          <h4>主帖</h4>
+          <ul className="resource-list">
+            {groups.post.map((item) => (
+              <ItemRow
+                key={item.id}
+                item={item}
+                checked={selected.has(item.id)}
+                onToggle={onToggle}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {groups.comments.map((c) => (
+        <div className="resource-group" key={c.commentId}>
+          <h4>
+            评论 #{c.index}
+            {c.textPreview ? <span className="muted"> — {c.textPreview}</span> : null}
+          </h4>
+          {c.items.length === 0 ? (
+            <p className="muted">无媒体（可能仅含 Telegraph 链接，见下方）</p>
+          ) : (
+            <ul className="resource-list">
+              {c.items.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  checked={selected.has(item.id)}
+                  onToggle={onToggle}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+
+      {groups.telegraph.map((g) => (
+        <div className="resource-group" key={g.url}>
+          <h4>
+            Telegraph：{g.title || g.url}
+            {g.fromOrigin === 'comment' ? (
+              <span className="muted">（来自评论）</span>
+            ) : g.fromOrigin === 'post' ? (
+              <span className="muted">（来自主帖）</span>
+            ) : null}
+          </h4>
+          <ul className="resource-list">
+            {g.items.map((item) => (
+              <ItemRow
+                key={item.id}
+                item={item}
+                checked={selected.has(item.id)}
+                onToggle={onToggle}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </>
+  )
+}
+
 export type ResourceDrawerProps = {
   manifest: ResourceManifest
   selected: Set<string>
@@ -113,110 +215,21 @@ export default function ResourceDrawer({
         {error ? <p className="error-text drawer-error">{error}</p> : null}
 
         <div className="drawer-body">
-          {manifest.groups.post.length > 0 ? (
-            <div className="resource-group">
-              <h3>主帖</h3>
-              <ul className="resource-list">
-                {manifest.groups.post.map((item) => (
-                  <li key={item.id}>
-                    <label className="resource-item">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(item.id)}
-                        onChange={() => onToggle(item.id)}
-                      />
-                      <span className="resource-thumb" aria-hidden>
-                        {item.previewUrl ? (
-                          <img src={item.previewUrl} alt="" />
-                        ) : (
-                          <span className="resource-thumb-ph">{kindLabel(item.kind).slice(0, 1)}</span>
-                        )}
-                      </span>
-                      <span>
-                        {item.label}
-                        <span className="muted"> · {kindLabel(item.kind)}</span>
-                        {item.fileName ? <span className="muted"> · {item.fileName}</span> : null}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {manifest.groups.comments.map((c) => (
-            <div className="resource-group" key={c.commentId}>
-              <h3>
-                评论 #{c.index}
-                {c.textPreview ? <span className="muted"> — {c.textPreview}</span> : null}
-              </h3>
-              {c.items.length === 0 ? (
-                <p className="muted">无媒体（可能仅含 Telegraph 链接，见下方）</p>
-              ) : (
-                <ul className="resource-list">
-                  {c.items.map((item) => (
-                    <li key={item.id}>
-                      <label className="resource-item">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(item.id)}
-                          onChange={() => onToggle(item.id)}
-                        />
-                        <span className="resource-thumb" aria-hidden>
-                          {item.previewUrl ? (
-                            <img src={item.previewUrl} alt="" />
-                          ) : (
-                            <span className="resource-thumb-ph">{kindLabel(item.kind).slice(0, 1)}</span>
-                          )}
-                        </span>
-                        <span>
-                          {item.label}
-                          <span className="muted"> · {kindLabel(item.kind)}</span>
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-
-          {manifest.groups.telegraph.map((g) => (
-            <div className="resource-group" key={g.url}>
-              <h3>
-                Telegraph：{g.title || g.url}
-                {g.fromOrigin === 'comment' ? (
-                  <span className="muted">（来自评论）</span>
-                ) : g.fromOrigin === 'post' ? (
-                  <span className="muted">（来自主帖）</span>
-                ) : null}
-              </h3>
-              <ul className="resource-list">
-                {g.items.map((item) => (
-                  <li key={item.id}>
-                    <label className="resource-item">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(item.id)}
-                        onChange={() => onToggle(item.id)}
-                      />
-                      <span className="resource-thumb" aria-hidden>
-                        {item.previewUrl ? (
-                          <img src={item.previewUrl} alt="" />
-                        ) : (
-                          <span className="resource-thumb-ph">{kindLabel(item.kind).slice(0, 1)}</span>
-                        )}
-                      </span>
-                      <span>
-                        {item.label}
-                        <span className="muted"> · {kindLabel(item.kind)}</span>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {manifest.messageGroups && manifest.messageGroups.length > 0
+            ? manifest.messageGroups.map((mg) => (
+                <div className="message-group" key={mg.sourceUrl}>
+                  <h3 className="message-group-title">
+                    消息 {mg.messageIndex}
+                    <span className="muted"> · {mg.title || mg.sourceUrl}</span>
+                  </h3>
+                  {renderGroups(
+                    { post: mg.post, comments: mg.comments, telegraph: mg.telegraph },
+                    selected,
+                    onToggle,
+                  )}
+                </div>
+              ))
+            : renderGroups(manifest.groups, selected, onToggle)}
         </div>
 
         <footer className="drawer-footer">

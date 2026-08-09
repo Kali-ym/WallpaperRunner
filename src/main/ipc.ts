@@ -5,7 +5,7 @@ import { getAdapterById, registerAdapter, resolveAdapter } from './adapters/regi
 import { isDownloadSource, type DownloadSource } from './sources/types'
 import { assertUrlsForSource } from './sources/validate'
 import { xchinaAdapter } from './adapters/xchina/adapter'
-import { telegramAdapter, discoverTelegramWithClient } from './adapters/telegram/adapter'
+import { telegramAdapter, discoverTelegramUrlsWithClient } from './adapters/telegram/adapter'
 import { telegraphAdapter, discoverTelegraph } from './adapters/telegraph/adapter'
 import { putResourceManifest } from './resources/session'
 import type { ResourceManifest } from './resources/types'
@@ -384,13 +384,6 @@ export function registerIpc(): void {
     if (!adapter) throw new Error('暂不支持该来源')
     if (!adapter.discover) throw new Error('该来源不支持资源嗅探')
 
-    // Multi-URL merge for Telegram lands in Task 5; for now use first URL only for telegram
-    // unless a single URL. xChina/Telegraph: one URL expected from UI.
-    if (source !== 'telegram' && cleaned.length !== 1) {
-      throw new Error('该来源每次请只解析一条链接')
-    }
-    const trimmed = cleaned[0]
-
     const fetchText = fetchHtml
     let manifest: ResourceManifest
     let handles = new Map<string, import('./adapters/telegram/discover').MediaHandle>()
@@ -398,12 +391,14 @@ export function registerIpc(): void {
     if (source === 'telegram') {
       const creds = telegramCredentials()
       if (!creds) throw new Error('请先在设置中填写 api_id / api_hash')
-      const result = await discoverTelegramWithClient(trimmed, creds.apiId, creds.apiHash, {
+      const result = await discoverTelegramUrlsWithClient(cleaned, creds.apiId, creds.apiHash, {
         fetchText,
       })
       manifest = result.manifest
       handles = result.handles
     } else if (source === 'telegraph') {
+      if (cleaned.length !== 1) throw new Error('该来源每次请只解析一条链接')
+      const trimmed = cleaned[0]
       const creds = telegramCredentials()
       if (!creds) {
         throw new Error(
@@ -435,7 +430,8 @@ export function registerIpc(): void {
         handles = cached.handles
       }
     } else {
-      manifest = await adapter.discover(trimmed, { fetchText })
+      if (cleaned.length !== 1) throw new Error('该来源每次请只解析一条链接')
+      manifest = await adapter.discover(cleaned[0], { fetchText })
     }
 
     putResourceManifest(manifest, handles)

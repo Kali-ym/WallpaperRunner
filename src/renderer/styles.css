@@ -781,9 +781,23 @@ textarea {
   gap: 4px;
 }
 
-.resource-group h3 {
+.message-group {
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.message-group-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.resource-group h3,
+.resource-group h4 {
   margin: 8px 0 6px;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .resource-list {
