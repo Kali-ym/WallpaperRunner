@@ -50,11 +50,27 @@ export default function DownloadPage(): JSX.Element {
   const [askExtract, setAskExtract] = useState<AskExtract | null>(null)
   const [extractBusy, setExtractBusy] = useState(false)
   const [extractError, setExtractError] = useState('')
+  const [subUrl, setSubUrl] = useState('')
+  const [subs, setSubs] = useState<
+    Array<{
+      id: string
+      url: string
+      label: string
+      enabled: boolean
+      createdAt: string
+      lastCheckedAt?: string
+      lastStatus?: 'ok' | 'updated' | 'error' | 'skipped'
+      lastError?: string
+      lastImageCount?: number
+    }>
+  >([])
+  const [subBusy, setSubBusy] = useState(false)
 
   const failedCount = tasks.filter((t) => t.status === 'failed').length
 
   useEffect(() => {
     void api.listTasks().then(setTasks)
+    void api.listSubscriptions().then(setSubs)
     const offQueue = api.onQueueUpdate(setTasks)
     const offExtract = api.onAskExtract((payload) => {
       setExtractError('')
@@ -268,6 +284,113 @@ export default function DownloadPage(): JSX.Element {
       </div>
       {error ? <p className="error-text">{error}</p> : null}
       {dragOver ? <p className="drop-hint">松开以加入下载</p> : null}
+
+      <h3 className="page-subtitle">订阅</h3>
+      <p className="muted field-hint">
+        收藏套图 URL，检查更新时若有新图将自动入队（Telegram/Telegraph 需勾选的来源会跳过）。
+      </p>
+      <div className="page-toolbar wrap">
+        <input
+          className="text-input"
+          placeholder="https://xchina.co/photo/id-….html"
+          value={subUrl}
+          onChange={(e) => setSubUrl(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn"
+          disabled={subBusy || !subUrl.trim()}
+          onClick={() => {
+            void (async () => {
+              setSubBusy(true)
+              try {
+                await api.addSubscription(subUrl.trim())
+                setSubUrl('')
+                setSubs(await api.listSubscriptions())
+                toast.success('已添加订阅')
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : String(err))
+              } finally {
+                setSubBusy(false)
+              }
+            })()
+          }}
+        >
+          添加
+        </button>
+        <button
+          type="button"
+          className="btn primary"
+          disabled={subBusy || subs.length === 0}
+          onClick={() => {
+            void (async () => {
+              setSubBusy(true)
+              try {
+                const r = await api.checkSubscriptions()
+                setSubs(r.subscriptions)
+                toast.success(
+                  r.enqueued > 0
+                    ? `检查 ${r.checked} 条，入队 ${r.enqueued} 条`
+                    : `已检查 ${r.checked} 条，无更新`,
+                )
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : String(err))
+              } finally {
+                setSubBusy(false)
+              }
+            })()
+          }}
+        >
+          {subBusy ? '检查中…' : '立即检查'}
+        </button>
+      </div>
+      {subs.length === 0 ? (
+        <p className="empty-hint">暂无订阅</p>
+      ) : (
+        <ul className="sub-list">
+          {subs.map((s) => (
+            <li key={s.id} className="sub-item">
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={s.enabled}
+                  onChange={(e) => {
+                    void api.setSubscriptionEnabled(s.id, e.target.checked).then(async () => {
+                      setSubs(await api.listSubscriptions())
+                    })
+                  }}
+                />
+                <span>
+                  <strong>{s.label}</strong>
+                  <span className="muted"> · {s.url}</span>
+                </span>
+              </label>
+              <div className="sub-meta muted">
+                {s.lastStatus ? (
+                  <span>
+                    {s.lastStatus}
+                    {s.lastImageCount != null ? ` · ${s.lastImageCount} 张` : ''}
+                    {s.lastError ? ` · ${s.lastError}` : ''}
+                  </span>
+                ) : (
+                  <span>尚未检查</span>
+                )}
+                <button
+                  type="button"
+                  className="btn tiny"
+                  onClick={() => {
+                    void api.removeSubscription(s.id).then(async () => {
+                      setSubs(await api.listSubscriptions())
+                    })
+                  }}
+                >
+                  删除
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <h3 className="page-subtitle">队列</h3>
       <ul className="task-list">

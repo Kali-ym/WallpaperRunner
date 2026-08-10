@@ -767,6 +767,31 @@ textarea {
   font-size: 0.92rem;
 }
 
+.sub-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.sub-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+}
+
+.sub-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
 .task-main {
   display: grid;
   gap: 6px;

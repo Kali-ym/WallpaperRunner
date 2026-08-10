@@ -139,6 +139,50 @@ const api = {
     ipcRenderer.invoke('queue:retryTask', taskId),
   retryAllFailed: (): Promise<number> => ipcRenderer.invoke('queue:retryAllFailed'),
   listTasks: (): Promise<QueueTask[]> => ipcRenderer.invoke('queue:list'),
+  listSubscriptions: (): Promise<
+    Array<{
+      id: string
+      url: string
+      label: string
+      enabled: boolean
+      createdAt: string
+      lastCheckedAt?: string
+      lastStatus?: 'ok' | 'updated' | 'error' | 'skipped'
+      lastError?: string
+      lastGalleryId?: string
+      lastImageCount?: number
+    }>
+  > => ipcRenderer.invoke('subscriptions:list'),
+  addSubscription: (
+    url: string,
+    label?: string,
+  ): Promise<{
+    id: string
+    url: string
+    label: string
+    enabled: boolean
+    createdAt: string
+  }> => ipcRenderer.invoke('subscriptions:add', url, label),
+  removeSubscription: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke('subscriptions:remove', id),
+  setSubscriptionEnabled: (id: string, enabled: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('subscriptions:setEnabled', id, enabled),
+  checkSubscriptions: (): Promise<{
+    checked: number
+    enqueued: number
+    subscriptions: Array<{
+      id: string
+      url: string
+      label: string
+      enabled: boolean
+      createdAt: string
+      lastCheckedAt?: string
+      lastStatus?: 'ok' | 'updated' | 'error' | 'skipped'
+      lastError?: string
+      lastGalleryId?: string
+      lastImageCount?: number
+    }>
+  }> => ipcRenderer.invoke('subscriptions:checkAll'),
   classifyUrls: (
     urls: string[],
   ): Promise<

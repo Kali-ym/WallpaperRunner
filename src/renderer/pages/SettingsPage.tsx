@@ -136,6 +136,25 @@ export default function SettingsPage(): JSX.Element {
             onBlur={() => void save({ proxyUrl: settings.proxyUrl })}
           />
         </label>
+        <label className="field">
+          <span>订阅自动检查间隔（小时，0 = 仅手动）</span>
+          <input
+            className="text-input narrow"
+            type="number"
+            min={0}
+            max={168}
+            value={settings.subscriptionCheckHours ?? 6}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                subscriptionCheckHours: Number(e.target.value) || 0,
+              })
+            }
+            onBlur={() =>
+              void save({ subscriptionCheckHours: settings.subscriptionCheckHours ?? 6 })
+            }
+          />
+        </label>
       </section>
 
       <section className="settings-section">
