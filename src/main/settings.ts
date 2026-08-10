@@ -23,6 +23,8 @@ export interface AppSettings {
   telegramApiHash: string
   /** Appearance: follow OS / force light / force dark */
   theme: ThemePreference
+  /** First-run wizard completed */
+  onboardingDone: boolean
 }
 
 function defaultSettings(): AppSettings {
@@ -43,6 +45,7 @@ function defaultSettings(): AppSettings {
     telegramApiId: '',
     telegramApiHash: '',
     theme: 'system',
+    onboardingDone: false,
   }
 }
 
@@ -55,6 +58,9 @@ export async function loadSettings(): Promise<AppSettings> {
   try {
     const raw = await readFile(settingsPath(), 'utf8')
     const parsed = JSON.parse(raw) as Partial<AppSettings>
+    // Existing installs without the field should not re-see the wizard.
+    const onboardingDone =
+      typeof parsed.onboardingDone === 'boolean' ? parsed.onboardingDone : true
     const settings: AppSettings = {
       downloadRoot: parsed.downloadRoot || defaults.downloadRoot,
       imageConcurrency:
@@ -83,6 +89,7 @@ export async function loadSettings(): Promise<AppSettings> {
         parsed.theme === 'light' || parsed.theme === 'dark' || parsed.theme === 'system'
           ? parsed.theme
           : defaults.theme,
+      onboardingDone,
     }
     setHttpProxy(settings.proxyUrl || null)
     return settings
@@ -127,6 +134,10 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
       partial.theme === 'light' || partial.theme === 'dark' || partial.theme === 'system'
         ? partial.theme
         : current.theme,
+    onboardingDone:
+      typeof partial.onboardingDone === 'boolean'
+        ? partial.onboardingDone
+        : current.onboardingDone,
   }
   await mkdir(app.getPath('userData'), { recursive: true })
   await writeFile(settingsPath(), JSON.stringify(next, null, 2), 'utf8')

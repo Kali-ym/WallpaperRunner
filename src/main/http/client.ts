@@ -79,7 +79,9 @@ async function curlFetch(url: string, init?: RequestInit): Promise<Response> {
   args.push(url)
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('curl.exe', args, { windowsHide: true })
+    const child = spawn(process.platform === 'win32' ? 'curl.exe' : 'curl', args, {
+      windowsHide: true,
+    })
     let err = ''
     child.stderr.on('data', (d) => {
       err += String(d)
@@ -126,9 +128,8 @@ export async function httpFetch(
   if (preferCurl && !opts?.disableCurl) {
     try {
       return await curlFetch(url, init as RequestInit)
-    } catch (err) {
-      // fall through to undici
-      if (!proxyUrl) throw err
+    } catch {
+      // Always fall through to undici (Windows without curl, Cloudflare blocks, etc.)
     }
   }
   const res = await undiciFetch(url, {

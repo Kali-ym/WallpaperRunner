@@ -109,6 +109,18 @@ export default function SettingsPage(): JSX.Element {
           >
             从磁盘重建索引
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              void api.setSettings({ onboardingDone: false }).then((next) => {
+                setSettings(next)
+                window.dispatchEvent(new CustomEvent('wallpaper-runner:replay-onboarding'))
+              })
+            }}
+          >
+            重新打开首次引导
+          </button>
         </div>
       </section>
 

@@ -911,6 +911,58 @@ textarea {
   z-index: 0;
 }
 
+.onboarding-root {
+  z-index: 90;
+}
+
+.onboarding-card {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 32px));
+  padding: 28px 26px 20px;
+  border-radius: calc(var(--radius) + 6px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+}
+
+.onboarding-brand {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.onboarding-card h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.onboarding-sources {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 8px;
+}
+
+.onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.onboarding-step {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
 .modal-panel {
   position: relative;
   z-index: 1;

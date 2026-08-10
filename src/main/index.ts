@@ -44,6 +44,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    title: 'WallpaperRunner',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

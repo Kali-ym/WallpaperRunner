@@ -1,34 +1,26 @@
-# 套图下载器与本地查看器
+# WallpaperRunner
 
-Electron + React 桌面应用：支持通过可扩展来源适配器下载套图原图，并在本地浏览。
+套图下载 → 本地库 → Wallpaper Engine 轮播。
 
-## 开发运行
+## 开发
 
 ```bash
-# 如 Electron 下载失败，可先设置镜像：
-# Windows PowerShell:
-#   $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-
 npm install
-npm test
 npm run dev
 ```
 
-## 使用
-
-1. 打开「下载」页，粘贴一个或多个套图 URL（换行/逗号分隔）
-2. 首版支持 `https://xchina.co/photo/id-xxxx.html`
-3. 下载完成后在「库」中搜索、浏览；大图支持 `←` `→` `Esc` `F`
-
-## 验证爬取
+## 测试
 
 ```bash
-# 需本机代理可用（默认 127.0.0.1:7890）
-npx tsx scripts/e2e-xchina-download.ts
+npm test
 ```
 
-成功时应解析出 59 张，并下载数张约 200KB+ 的原图 JPEG 到 `tmp-e2e-download/`。
+## 打包（Windows）
 
-## 扩展新来源
+```bash
+npm run dist
+```
 
-在 `src/main/adapters/` 新增适配器，实现 `SourceAdapter`，并在 `src/main/ipc.ts` 的 `initAppServices` 中 `registerAdapter(...)`。
+产物在 `release/`。自动更新（electron-updater + GitHub Releases）预留未接。Windows 打包若卡在签名工具下载，可保持 `signAndEditExecutable: false`（开发机默认）。
+
+首次启动会显示引导（下载目录 / 代理 / 来源说明）。设置页可「重新打开首次引导」。

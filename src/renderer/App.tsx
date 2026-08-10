@@ -8,8 +8,9 @@ import ToastHost from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ShortcutHelp from './components/ShortcutHelp'
 import DownloadDock from './components/DownloadDock'
+import OnboardingModal from './components/OnboardingModal'
 import { ToastProvider, useToast } from './lib/toast'
-import { api, type LibraryIndexEntry, type QueueTask } from './lib/api'
+import { api, type AppSettings, type LibraryIndexEntry, type QueueTask } from './lib/api'
 import {
   applyTheme,
   THEME_CHANGED_EVENT,
@@ -36,6 +37,8 @@ function AppShell(): JSX.Element {
   const [themePref, setThemePref] = useState<ThemePreference>('system')
   const [helpOpen, setHelpOpen] = useState(false)
   const [tasks, setTasks] = useState<QueueTask[]>([])
+  const [bootSettings, setBootSettings] = useState<AppSettings | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const helpOpenRef = useRef(helpOpen)
   const activeRef = useRef(active)
   const prevStatus = useRef<Map<string, QueueTask['status']>>(new Map())
@@ -47,7 +50,20 @@ function AppShell(): JSX.Element {
       const pref = s.theme ?? 'system'
       setThemePref(pref)
       applyTheme(pref)
+      setBootSettings(s)
+      setShowOnboarding(!s.onboardingDone)
     })
+  }, [])
+
+  useEffect(() => {
+    function onReplay(): void {
+      void api.getSettings().then((s) => {
+        setBootSettings(s)
+        setShowOnboarding(true)
+      })
+    }
+    window.addEventListener('wallpaper-runner:replay-onboarding', onReplay)
+    return () => window.removeEventListener('wallpaper-runner:replay-onboarding', onReplay)
   }, [])
 
   useEffect(() => {
@@ -249,6 +265,20 @@ function AppShell(): JSX.Element {
           setTab('download')
         }}
       />
+      {showOnboarding && bootSettings ? (
+        <OnboardingModal
+          initial={bootSettings}
+          onDone={(next) => {
+            setBootSettings(next)
+            setShowOnboarding(false)
+            if (next.theme) {
+              setThemePref(next.theme)
+              applyTheme(next.theme)
+            }
+            toast.success('初始设置已完成')
+          }}
+        />
+      ) : null}
       {helpOpen ? <ShortcutHelp onClose={() => setHelpOpen(false)} /> : null}
       <ToastHost />
     </div>
