@@ -68,7 +68,7 @@ export default function SettingsPage(): JSX.Element {
           </div>
         </label>
         <label className="field">
-          <span>套内图片并发数</span>
+          <span>套内图片并发数（1–8，默认 2；过高可能导致代理/CDN 丢文件）</span>
           <input
             className="text-input narrow"
             type="number"
@@ -80,14 +80,6 @@ export default function SettingsPage(): JSX.Element {
             }
             onBlur={() => void save({ imageConcurrency: settings.imageConcurrency })}
           />
-        </label>
-        <label className="field checkbox">
-          <input
-            type="checkbox"
-            checked={settings.openAfterDownload}
-            onChange={(e) => void save({ openAfterDownload: e.target.checked })}
-          />
-          <span>下载完成后自动打开该套图（预留）</span>
         </label>
         <div className="page-toolbar">
           <button

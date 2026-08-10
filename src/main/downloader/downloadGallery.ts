@@ -105,7 +105,7 @@ export async function downloadGallery(
   const errors: string[] = []
 
   // Keep concurrency modest — too many parallel curl/proxy calls drop files under load.
-  const concurrency = Math.min(Math.max(1, opts.concurrency), 3)
+  const concurrency = Math.min(Math.max(1, opts.concurrency), 8)
 
   const settled = await mapPool(result.images, concurrency, async (img, index) => {
     if (opts.signal?.aborted) throw new Error('已取消')

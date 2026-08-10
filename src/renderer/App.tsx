@@ -5,6 +5,7 @@ import DownloadPage from './pages/DownloadPage'
 import SettingsPage from './pages/SettingsPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import ToastHost from './components/Toast'
+import ErrorBoundary from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
 import type { LibraryIndexEntry } from './lib/api'
 
@@ -109,8 +110,10 @@ function AppShell(): JSX.Element {
 
 export default function App(): JSX.Element {
   return (
-    <ToastProvider>
-      <AppShell />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AppShell />
+      </ToastProvider>
+    </ErrorBoundary>
   )
 }

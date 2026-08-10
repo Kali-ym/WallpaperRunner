@@ -7,7 +7,6 @@ import { setHttpProxy } from './http/client'
 export interface AppSettings {
   downloadRoot: string
   imageConcurrency: number
-  openAfterDownload: boolean
   /** HTTP(S) proxy, e.g. http://127.0.0.1:7890. Empty = direct. */
   proxyUrl: string
   /** Local Wallpaper Engine web wallpaper project directory */
@@ -32,7 +31,6 @@ function defaultSettings(): AppSettings {
   return {
     downloadRoot: join(homedir(), 'Pictures', 'gallery-library'),
     imageConcurrency: 2,
-    openAfterDownload: false,
     // Clash / common local proxy default; user can clear in settings
     proxyUrl: envProxy || 'http://127.0.0.1:7890',
     wallpaperEngineDir: join(homedir(), 'Documents', 'gallery-we-wallpaper'),
@@ -58,7 +56,6 @@ export async function loadSettings(): Promise<AppSettings> {
         typeof parsed.imageConcurrency === 'number' && parsed.imageConcurrency > 0
           ? Math.floor(parsed.imageConcurrency)
           : defaults.imageConcurrency,
-      openAfterDownload: Boolean(parsed.openAfterDownload),
       proxyUrl:
         typeof parsed.proxyUrl === 'string' ? parsed.proxyUrl.trim() : defaults.proxyUrl,
       wallpaperEngineDir:

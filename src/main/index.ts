@@ -1,6 +1,28 @@
 import { app, BrowserWindow, protocol } from 'electron'
-import { join } from 'node:path'
+import { appendFile, mkdir } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { initAppServices, registerIpc, registerProtocols } from './ipc'
+
+async function appendMainLog(line: string): Promise<void> {
+  try {
+    const p = join(app.getPath('userData'), 'logs', 'main.log')
+    await mkdir(dirname(p), { recursive: true })
+    await appendFile(p, `[${new Date().toISOString()}] ${line}\n`, 'utf8')
+  } catch {
+    /* ignore logging failures */
+  }
+}
+
+function registerProcessLogHandlers(): void {
+  process.on('unhandledRejection', (reason) => {
+    void appendMainLog(
+      `unhandledRejection ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`,
+    )
+  })
+  process.on('uncaughtException', (err) => {
+    void appendMainLog(`uncaughtException ${err.stack ?? err.message}`)
+  })
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -40,6 +62,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  registerProcessLogHandlers()
   await initAppServices()
   registerProtocols()
   registerIpc()
