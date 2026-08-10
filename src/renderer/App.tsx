@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import LibraryPage from './pages/LibraryPage'
 import GalleryPage from './pages/GalleryPage'
 import DownloadPage from './pages/DownloadPage'
@@ -7,13 +7,42 @@ import PlaylistsPage from './pages/PlaylistsPage'
 import ToastHost from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
-import type { LibraryIndexEntry } from './lib/api'
+import { api, type LibraryIndexEntry } from './lib/api'
+import {
+  applyTheme,
+  THEME_CHANGED_EVENT,
+  watchSystemTheme,
+  type ThemePreference,
+} from './lib/theme'
 
 type Tab = 'library' | 'playlists' | 'download' | 'settings'
 
 function AppShell(): JSX.Element {
   const [tab, setTab] = useState<Tab>('library')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
+  const [themePref, setThemePref] = useState<ThemePreference>('system')
+
+  useEffect(() => {
+    void api.getSettings().then((s) => {
+      const pref = s.theme ?? 'system'
+      setThemePref(pref)
+      applyTheme(pref)
+    })
+  }, [])
+
+  useEffect(() => {
+    applyTheme(themePref)
+    return watchSystemTheme(themePref, () => applyTheme(themePref))
+  }, [themePref])
+
+  useEffect(() => {
+    const onTheme = (e: Event) => {
+      const pref = (e as CustomEvent<ThemePreference>).detail
+      if (pref) setThemePref(pref)
+    }
+    window.addEventListener(THEME_CHANGED_EVENT, onTheme)
+    return () => window.removeEventListener(THEME_CHANGED_EVENT, onTheme)
+  }, [])
 
   return (
     <div className="app-shell">

@@ -18,6 +18,21 @@
   font-feature-settings: 'ss01' on;
 }
 
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #121416;
+  --panel: #1a1d21;
+  --text: #e6e9ed;
+  --ink: var(--text);
+  --muted: #9aa3ad;
+  --line: #2a2f36;
+  --accent: #2dd4bf;
+  --accent-ink: #042f2e;
+  --danger: #f87171;
+  --shadow: 0 1px 2px color-mix(in srgb, #000 40%, transparent),
+    0 8px 24px color-mix(in srgb, #000 35%, transparent);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -30,7 +45,12 @@ body,
   background:
     radial-gradient(ellipse 80% 50% at 0% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
     radial-gradient(ellipse 60% 40% at 100% 0%, color-mix(in srgb, #64748b 6%, transparent), transparent 50%),
-    linear-gradient(180deg, #f7f9f8 0%, var(--bg) 48%, #eef2f1 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg) 70%, var(--panel)) 0%,
+      var(--bg) 48%,
+      color-mix(in srgb, var(--bg) 85%, var(--line)) 100%
+    );
   color: var(--text);
   background-attachment: fixed;
 }

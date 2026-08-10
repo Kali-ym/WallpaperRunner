@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import { useToast } from '../lib/toast'
 import { api, type AppSettings, type TelegramAuthStatus } from '../lib/api'
+import { emitThemeChanged, type ThemePreference } from '../lib/theme'
 
 function tgBadge(state: TelegramAuthStatus['state'] | undefined): { label: string; tone: string } {
   switch (state) {
@@ -37,6 +38,7 @@ export default function SettingsPage(): JSX.Element {
   async function save(partial: Partial<AppSettings>): Promise<void> {
     const next = await api.setSettings(partial)
     setSettings(next)
+    if (partial.theme) emitThemeChanged(partial.theme)
     toast.success('已保存')
   }
 
@@ -80,6 +82,22 @@ export default function SettingsPage(): JSX.Element {
             }
             onBlur={() => void save({ imageConcurrency: settings.imageConcurrency })}
           />
+        </label>
+        <label className="field">
+          <span>外观</span>
+          <select
+            className="text-input"
+            value={settings.theme ?? 'system'}
+            onChange={(e) => {
+              const theme = e.target.value as ThemePreference
+              setSettings({ ...settings, theme })
+              void save({ theme })
+            }}
+          >
+            <option value="system">跟随系统</option>
+            <option value="light">亮色</option>
+            <option value="dark">暗色</option>
+          </select>
         </label>
         <div className="page-toolbar">
           <button

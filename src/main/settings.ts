@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { setHttpProxy } from './http/client'
 
+export type ThemePreference = 'system' | 'light' | 'dark'
+
 export interface AppSettings {
   downloadRoot: string
   imageConcurrency: number
@@ -19,6 +21,8 @@ export interface AppSettings {
   telegramApiId: string
   /** Telegram MTProto api_hash from my.telegram.org */
   telegramApiHash: string
+  /** Appearance: follow OS / force light / force dark */
+  theme: ThemePreference
 }
 
 function defaultSettings(): AppSettings {
@@ -38,6 +42,7 @@ function defaultSettings(): AppSettings {
     wallpaperMediaPort: 17989,
     telegramApiId: '',
     telegramApiHash: '',
+    theme: 'system',
   }
 }
 
@@ -74,6 +79,10 @@ export async function loadSettings(): Promise<AppSettings> {
         typeof parsed.telegramApiId === 'string' ? parsed.telegramApiId.trim() : '',
       telegramApiHash:
         typeof parsed.telegramApiHash === 'string' ? parsed.telegramApiHash.trim() : '',
+      theme:
+        parsed.theme === 'light' || parsed.theme === 'dark' || parsed.theme === 'system'
+          ? parsed.theme
+          : defaults.theme,
     }
     setHttpProxy(settings.proxyUrl || null)
     return settings
@@ -114,6 +123,10 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
       typeof partial.telegramApiHash === 'string'
         ? partial.telegramApiHash.trim()
         : current.telegramApiHash,
+    theme:
+      partial.theme === 'light' || partial.theme === 'dark' || partial.theme === 'system'
+        ? partial.theme
+        : current.theme,
   }
   await mkdir(app.getPath('userData'), { recursive: true })
   await writeFile(settingsPath(), JSON.stringify(next, null, 2), 'utf8')
