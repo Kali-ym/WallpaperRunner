@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import ShortcutHelp from './components/ShortcutHelp'
 import DownloadDock from './components/DownloadDock'
 import OnboardingModal from './components/OnboardingModal'
+import WindowControls from './components/WindowControls'
 import CollectionRail, { type BrowseSelection } from './components/CollectionRail'
 import { ToastProvider, useToast } from './lib/toast'
 import { api, type AppSettings, type LibraryIndexEntry, type QueueTask } from './lib/api'
@@ -29,11 +30,31 @@ function isTypingTarget(t: EventTarget | null): boolean {
   return t.isContentEditable
 }
 
+function BrandMark(): JSX.Element {
+  return (
+    <svg className="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path
+        d="M8 22c2-6 4.5-10 7-12 1.5 4 3 6.5 5 8 1.5-3 3-5 5-6-1 6-2.5 10-4 14H8z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <circle cx="22.5" cy="9.5" r="1.6" fill="currentColor" />
+      <path
+        d="M6 25h20"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
+    </svg>
+  )
+}
+
 function AppShell(): JSX.Element {
   const toast = useToast()
   const [mode, setMode] = useState<AppMode>('browse')
   const [browseSelection, setBrowseSelection] = useState<BrowseSelection>({ kind: 'all' })
-  const [railCollapsed, setRailCollapsed] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('system')
@@ -112,14 +133,6 @@ function AppShell(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 860px)')
-    const apply = (): void => setRailCollapsed(mq.matches)
-    apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [])
-
-  useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (document.querySelector('.yarl__root')) return
       if (isTypingTarget(e.target) && e.key !== 'Escape') return
@@ -184,110 +197,164 @@ function AppShell(): JSX.Element {
     })
   }
 
+  function goHome(): void {
+    setActive(null)
+    setMode('browse')
+    setBrowseSelection({ kind: 'all' })
+  }
+
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <button
-          type="button"
-          className="brand-block"
-          onClick={() => {
-            setActive(null)
-            setMode('browse')
-            setBrowseSelection({ kind: 'all' })
-          }}
-        >
-          <h1 className="brand-title">WallpaperRunner</h1>
-          <p className="muted brand-sub">套图下载 · 本地库 · 上墙</p>
-        </button>
-        {mode === 'browse' && !active ? (
-          <input
-            className="header-search"
-            data-focus="library-search"
-            placeholder="搜索标题 / 作者 / 标签"
-            value={headerQuery}
-            onChange={(e) => setHeaderQuery(e.target.value)}
-          />
-        ) : (
-          <div className="header-spacer" />
-        )}
-        <div className="header-actions">
-          <button
-            type="button"
-            className={mode === 'acquire' ? 'nav-btn active' : 'nav-btn'}
-            onClick={() => {
-              setActive(null)
-              setMode('acquire')
-            }}
-          >
-            获取
-            {activeCount > 0 ? <span className="nav-badge">{activeCount}</span> : null}
+    <div className={`app${api.windowIsFrameless() ? ' is-frameless' : ''}`}>
+      <header
+        className="header"
+        onDoubleClick={() => {
+          if (api.windowIsFrameless()) void api.windowToggleMaximize()
+        }}
+      >
+        <div className="header-main">
+          <button type="button" className="brand" onClick={goHome} aria-label="WallpaperRunner 首页">
+            <BrandMark />
+            <span className="brand-name">WallpaperRunner</span>
           </button>
-          <button
-            type="button"
-            className={mode === 'settings' ? 'nav-btn active' : 'nav-btn'}
-            onClick={() => {
-              setActive(null)
-              setMode('settings')
-            }}
-          >
-            设置
-          </button>
+
+          {mode === 'browse' && !active ? (
+            <label className="search">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                <path
+                  d="M16 16.5L20 20.5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <input
+                type="search"
+                data-focus="library-search"
+                placeholder="搜索壁纸、作者或关键词"
+                autoComplete="off"
+                value={headerQuery}
+                onChange={(e) => setHeaderQuery(e.target.value)}
+              />
+              <kbd>⌘K</kbd>
+            </label>
+          ) : (
+            <div className="header-spacer" />
+          )}
+
+          <div className="header-actions">
+            <button
+              type="button"
+              className={mode === 'acquire' ? 'icon-btn active' : 'icon-btn'}
+              title="获取"
+              aria-label="获取壁纸"
+              onClick={() => {
+                setActive(null)
+                setMode('acquire')
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 4v11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path
+                  d="M7.5 11.5L12 16l4.5-4.5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M5 19.5h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              {activeCount > 0 ? <span className="dot" /> : null}
+            </button>
+            <button
+              type="button"
+              className={mode === 'settings' ? 'icon-btn active' : 'icon-btn'}
+              title="设置"
+              aria-label="设置"
+              onClick={() => {
+                setActive(null)
+                setMode('settings')
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                <path
+                  d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
+        <WindowControls />
       </header>
 
-      <div className={`app-body${showRail ? ' with-rail' : ''}`}>
+      <div className="body" style={showRail ? undefined : { gridTemplateColumns: '1fr' }}>
         {showRail ? (
           <CollectionRail
             selection={browseSelection}
             onSelect={setBrowseSelection}
-            collapsed={railCollapsed}
-            onToggleCollapsed={() => setRailCollapsed((v) => !v)}
+            onManagePlaylist={(id) => {
+              window.dispatchEvent(
+                new CustomEvent('wallpaper-runner:manage-playlist', { detail: { id } }),
+              )
+            }}
           />
         ) : null}
-        <main className="app-main">
+        <main className="main">
           {active ? (
-            <GalleryPage
-              entry={active}
-              onBack={() => setActive(null)}
-              onDeleted={() => setActive(null)}
-            />
+            <section className="view view-gallery active" aria-label="套图详情">
+              <GalleryPage
+                entry={active}
+                onBack={() => setActive(null)}
+                onDeleted={() => setActive(null)}
+              />
+            </section>
           ) : null}
-          <div
-            className="tab-panel"
+          <section
+            className={active || mode !== 'browse' ? 'view' : 'view active'}
             hidden={Boolean(active) || mode !== 'browse'}
+            aria-label="本地套图库"
             style={{ display: active || mode !== 'browse' ? 'none' : undefined }}
           >
             <LibraryPage
               browseSelection={browseSelection}
+              onBrowseSelectionChange={setBrowseSelection}
               query={headerQuery}
               onQueryChange={setHeaderQuery}
               hideSearch
               onOpenGallery={openGallery}
             />
-          </div>
-          <div
-            className="tab-panel"
+          </section>
+          <section
+            className={active || mode !== 'acquire' ? 'view' : 'view active'}
             hidden={Boolean(active) || mode !== 'acquire'}
+            aria-label="获取"
             style={{ display: active || mode !== 'acquire' ? 'none' : undefined }}
           >
             <DownloadPage />
-          </div>
-          <div
-            className="tab-panel"
+          </section>
+          <section
+            className={active || mode !== 'settings' ? 'view' : 'view active'}
             hidden={Boolean(active) || mode !== 'settings'}
+            aria-label="设置"
             style={{ display: active || mode !== 'settings' ? 'none' : undefined }}
           >
             <SettingsPage />
-          </div>
+          </section>
+
+          <DownloadDock
+            tasks={tasks}
+            onOpenDownload={() => {
+              setActive(null)
+              setMode('acquire')
+            }}
+          />
         </main>
       </div>
-      <DownloadDock
-        tasks={tasks}
-        onOpenDownload={() => {
-          setActive(null)
-          setMode('acquire')
-        }}
-      />
+
       {showOnboarding && bootSettings ? (
         <OnboardingModal
           initial={bootSettings}

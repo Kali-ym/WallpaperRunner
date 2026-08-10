@@ -1,7 +1,8 @@
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, protocol } from 'electron'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { initAppServices, registerIpc, registerProtocols } from './ipc'
+import { resolveAppIconPath } from './appIcon'
 
 async function appendMainLog(line: string): Promise<void> {
   try {
@@ -38,13 +39,19 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 function createWindow(): void {
+  const frameless = process.platform === 'win32' || process.platform === 'linux'
+  const iconPath = resolveAppIconPath()
+  const icon = iconPath ? nativeImage.createFromPath(iconPath) : undefined
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
     minWidth: 960,
     minHeight: 640,
     show: false,
+    frame: !frameless,
     title: 'WallpaperRunner',
+    backgroundColor: '#14110f',
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -52,6 +59,12 @@ function createWindow(): void {
       sandbox: false,
     },
   })
+
+  if (frameless) {
+    Menu.setApplicationMenu(null)
+    win.on('maximize', () => win.webContents.send('window:maximized', true))
+    win.on('unmaximize', () => win.webContents.send('window:maximized', false))
+  }
 
   win.on('ready-to-show', () => win.show())
 
@@ -63,6 +76,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.wallpaperrunner.app')
+  }
+  const iconPath = resolveAppIconPath()
+  if (iconPath) {
+    const icon = nativeImage.createFromPath(iconPath)
+    if (!icon.isEmpty()) app.dock?.setIcon(icon)
+  }
   registerProcessLogHandlers()
   await initAppServices()
   registerProtocols()

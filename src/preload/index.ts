@@ -8,6 +8,24 @@ import type { ResourceManifest } from '../main/resources/types'
 import type { TelegramAuthStatus } from '../main/telegram/client'
 
 export type GalleryRef = { source: string; galleryId: string }
+export type AuthorAvatarRecord = {
+  author: string
+  fileName: string
+  relativePath: string
+  source: string
+  galleryId: string
+  imagePath: string
+  crop: { x: number; y: number; width: number; height: number }
+  updatedAt: string
+}
+export type AuthorImageSource = {
+  source: string
+  galleryId: string
+  dirName: string
+  title: string
+  cover: string | null
+  images: string[]
+}
 export type { ResourceManifest, TelegramAuthStatus, DownloadSource, LibraryFilters, TagStat, AuthorStat }
 
 const api = {
@@ -22,6 +40,26 @@ const api = {
   ): Promise<LibraryIndexEntry[]> => ipcRenderer.invoke('library:list', query, filters),
   tagStats: (): Promise<TagStat[]> => ipcRenderer.invoke('library:tagStats'),
   authorStats: (): Promise<AuthorStat[]> => ipcRenderer.invoke('library:authorStats'),
+  getAuthorAvatar: (author: string): Promise<AuthorAvatarRecord | null> =>
+    ipcRenderer.invoke('library:getAuthorAvatar', author),
+  listAuthorAvatars: (): Promise<AuthorAvatarRecord[]> =>
+    ipcRenderer.invoke('library:listAuthorAvatars'),
+  listAuthorImageSources: (author: string): Promise<AuthorImageSource[]> =>
+    ipcRenderer.invoke('library:listAuthorImageSources', author),
+  setAuthorAvatar: (
+    author: string,
+    payload: {
+      source: string
+      galleryId: string
+      dirName: string
+      imagePath: string
+      crop: { x: number; y: number; width: number; height: number }
+    },
+  ): Promise<AuthorAvatarRecord> => ipcRenderer.invoke('library:setAuthorAvatar', author, payload),
+  clearAuthorAvatar: (author: string): Promise<boolean> =>
+    ipcRenderer.invoke('library:clearAuthorAvatar', author),
+  renameAuthor: (from: string, to: string): Promise<number> =>
+    ipcRenderer.invoke('library:renameAuthor', from, to),
   addTags: (refs: GalleryRef[], tags: string[]): Promise<number> =>
     ipcRenderer.invoke('library:addTags', refs, tags),
   listPlaylists: (): Promise<
@@ -140,50 +178,6 @@ const api = {
     ipcRenderer.invoke('queue:retryTask', taskId),
   retryAllFailed: (): Promise<number> => ipcRenderer.invoke('queue:retryAllFailed'),
   listTasks: (): Promise<QueueTask[]> => ipcRenderer.invoke('queue:list'),
-  listSubscriptions: (): Promise<
-    Array<{
-      id: string
-      url: string
-      label: string
-      enabled: boolean
-      createdAt: string
-      lastCheckedAt?: string
-      lastStatus?: 'ok' | 'updated' | 'error' | 'skipped'
-      lastError?: string
-      lastGalleryId?: string
-      lastImageCount?: number
-    }>
-  > => ipcRenderer.invoke('subscriptions:list'),
-  addSubscription: (
-    url: string,
-    label?: string,
-  ): Promise<{
-    id: string
-    url: string
-    label: string
-    enabled: boolean
-    createdAt: string
-  }> => ipcRenderer.invoke('subscriptions:add', url, label),
-  removeSubscription: (id: string): Promise<boolean> =>
-    ipcRenderer.invoke('subscriptions:remove', id),
-  setSubscriptionEnabled: (id: string, enabled: boolean): Promise<unknown> =>
-    ipcRenderer.invoke('subscriptions:setEnabled', id, enabled),
-  checkSubscriptions: (): Promise<{
-    checked: number
-    enqueued: number
-    subscriptions: Array<{
-      id: string
-      url: string
-      label: string
-      enabled: boolean
-      createdAt: string
-      lastCheckedAt?: string
-      lastStatus?: 'ok' | 'updated' | 'error' | 'skipped'
-      lastError?: string
-      lastGalleryId?: string
-      lastImageCount?: number
-    }>
-  }> => ipcRenderer.invoke('subscriptions:checkAll'),
   classifyUrls: (
     urls: string[],
   ): Promise<
@@ -267,6 +261,23 @@ const api = {
     const thumb = opts?.thumb ? '&thumb=1' : ''
     const bust = opts?.bust != null ? `&v=${encodeURIComponent(String(opts.bust))}` : ''
     return `gallery-media://local/?path=${encodeURIComponent(relative)}${thumb}${bust}`
+  },
+  getAuthorAvatarUrl: (relativePath: string, bust?: string | number): string => {
+    const bustParam = bust != null ? `&v=${encodeURIComponent(String(bust))}` : ''
+    return `gallery-media://local/?path=${encodeURIComponent(relativePath)}${bustParam}`
+  },
+  windowIsFrameless: (): boolean =>
+    process.platform === 'win32' || process.platform === 'linux',
+  windowMinimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+  windowToggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window:toggleMaximize'),
+  windowClose: (): Promise<void> => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+  onWindowMaximized: (cb: (maximized: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void => {
+      cb(maximized)
+    }
+    ipcRenderer.on('window:maximized', listener)
+    return () => ipcRenderer.removeListener('window:maximized', listener)
   },
 }
 

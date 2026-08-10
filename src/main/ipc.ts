@@ -29,10 +29,9 @@ export type AskExtractPayload = {
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
 import { PlaylistStore } from './library/playlists'
+import { AuthorAvatarStore } from './library/authorAvatars'
 import { HistoryStore } from './library/history'
 import { importLocalFolders } from './library/importLocalFolders'
-import { SubscriptionStore } from './subscriptions/store'
-import { checkAllSubscriptions } from './subscriptions/check'
 import { DownloadQueue } from './queue/downloadQueue'
 import { loadSettings, saveSettings, type AppSettings } from './settings'
 import { telegramService } from './telegram/client'
@@ -51,14 +50,13 @@ import {
 
 let store: LibraryStore
 let playlistStore: PlaylistStore
+let authorAvatarStore: AuthorAvatarStore
 let historyStore: HistoryStore
-let subscriptionStore: SubscriptionStore
 let queue: DownloadQueue
 let settings: AppSettings
 let wallpaperSyncTimer: ReturnType<typeof setTimeout> | null = null
 let wallpaperSyncInFlight: Promise<SyncWallpaperResult | null> | null = null
 let libraryChangeTimer: ReturnType<typeof setTimeout> | null = null
-let subscriptionTimer: ReturnType<typeof setInterval> | null = null
 
 function broadcastTasks(): void {
   const payload = queue.listTasks()
@@ -80,6 +78,7 @@ function broadcastLibraryChanged(): void {
 function bindLibraryStore(next: LibraryStore): void {
   store = next
   playlistStore = new PlaylistStore(next.root)
+  authorAvatarStore = new AuthorAvatarStore(next.root)
   store.on('change', () => broadcastLibraryChanged())
 }
 
@@ -166,25 +165,6 @@ function rebuildQueue(): void {
   })
 }
 
-function scheduleSubscriptionChecks(): void {
-  if (subscriptionTimer) {
-    clearInterval(subscriptionTimer)
-    subscriptionTimer = null
-  }
-  const hours = settings.subscriptionCheckHours
-  if (!hours || hours <= 0) return
-  const ms = hours * 60 * 60 * 1000
-  subscriptionTimer = setInterval(() => {
-    void checkAllSubscriptions(subscriptionStore, {
-      store,
-      queue,
-      fetchText: fetchHtml,
-    }).then((r) => {
-      if (r.enqueued > 0) broadcastTasks()
-    })
-  }, ms)
-}
-
 export async function initAppServices(): Promise<void> {
   registerAdapter(xchinaAdapter)
   registerAdapter(telegramAdapter)
@@ -192,13 +172,11 @@ export async function initAppServices(): Promise<void> {
   settings = await loadSettings()
   await applyNetwork(settings.proxyUrl)
   historyStore = new HistoryStore(join(app.getPath('userData'), 'history.json'))
-  subscriptionStore = new SubscriptionStore(join(app.getPath('userData'), 'subscriptions.json'))
   bindLibraryStore(new LibraryStore(settings.downloadRoot))
   await store.ensureRoot()
   rebuildQueue()
   await queue.restoreFromDisk()
   await ensureMediaServer()
-  scheduleSubscriptionChecks()
   if (settings.wallpaperAutoSync) {
     void runWallpaperSync()
   }
@@ -275,9 +253,6 @@ export function registerIpc(): void {
     bindLibraryStore(new LibraryStore(settings.downloadRoot))
     await store.ensureRoot()
     rebuildQueue()
-    if (partial.subscriptionCheckHours !== undefined) {
-      scheduleSubscriptionChecks()
-    }
     if (
       settings.wallpaperAutoSync &&
       (partial.wallpaperEngineDir !== undefined ||
@@ -361,6 +336,48 @@ export function registerIpc(): void {
   ipcMain.handle('library:tagStats', async () => store.listTagStats())
 
   ipcMain.handle('library:authorStats', async () => store.listAuthorStats())
+
+  ipcMain.handle('library:getAuthorAvatar', async (_e, author: string) => {
+    return authorAvatarStore.get(author)
+  })
+
+  ipcMain.handle('library:listAuthorAvatars', async () => authorAvatarStore.list())
+
+  ipcMain.handle('library:listAuthorImageSources', async (_e, author: string) => {
+    return authorAvatarStore.listImageSources(store, author)
+  })
+
+  ipcMain.handle(
+    'library:setAuthorAvatar',
+    async (
+      _e,
+      author: string,
+      payload: {
+        source: string
+        galleryId: string
+        dirName: string
+        imagePath: string
+        crop: { x: number; y: number; width: number; height: number }
+      },
+    ) => {
+      const record = await authorAvatarStore.set(author, payload)
+      broadcastLibraryChanged()
+      return record
+    },
+  )
+
+  ipcMain.handle('library:clearAuthorAvatar', async (_e, author: string) => {
+    const cleared = await authorAvatarStore.clear(author)
+    if (cleared) broadcastLibraryChanged()
+    return cleared
+  })
+
+  ipcMain.handle('library:renameAuthor', async (_e, from: string, to: string) => {
+    const count = await store.renameAuthor(from, to)
+    if (count === 0) throw new Error('没有找到该作者的套图')
+    await authorAvatarStore.renameAuthor(from, to)
+    return count
+  })
 
   ipcMain.handle(
     'library:addTags',
@@ -656,34 +673,6 @@ export function registerIpc(): void {
 
   ipcMain.handle('queue:list', async () => queue.listTasks())
 
-  ipcMain.handle('subscriptions:list', async () => subscriptionStore.list())
-
-  ipcMain.handle('subscriptions:add', async (_e, url: string, label?: string) => {
-    return subscriptionStore.add(String(url ?? ''), label)
-  })
-
-  ipcMain.handle('subscriptions:remove', async (_e, id: string) => {
-    return subscriptionStore.remove(String(id ?? ''))
-  })
-
-  ipcMain.handle('subscriptions:setEnabled', async (_e, id: string, enabled: boolean) => {
-    return subscriptionStore.setEnabled(String(id ?? ''), Boolean(enabled))
-  })
-
-  ipcMain.handle('subscriptions:checkAll', async () => {
-    const result = await checkAllSubscriptions(subscriptionStore, {
-      store,
-      queue,
-      fetchText: fetchHtml,
-    })
-    if (result.enqueued > 0) broadcastTasks()
-    return {
-      checked: result.checked,
-      enqueued: result.enqueued,
-      subscriptions: await subscriptionStore.list(),
-    }
-  })
-
   ipcMain.handle('resources:classify', async (_e, urls: string[]) => {
     return urls.map((url) => {
       const adapter = resolveAdapter(url.trim())
@@ -793,4 +782,21 @@ export function registerIpc(): void {
   ipcMain.handle('telegram:waitLogin', async () => telegramService.waitForLogin())
 
   ipcMain.handle('telegram:logout', async () => telegramService.logout())
+
+  ipcMain.handle('window:minimize', (e) => {
+    BrowserWindow.fromWebContents(e.sender)?.minimize()
+  })
+  ipcMain.handle('window:toggleMaximize', (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (!win) return false
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
+  })
+  ipcMain.handle('window:close', (e) => {
+    BrowserWindow.fromWebContents(e.sender)?.close()
+  })
+  ipcMain.handle('window:isMaximized', (e) => {
+    return BrowserWindow.fromWebContents(e.sender)?.isMaximized() ?? false
+  })
 }

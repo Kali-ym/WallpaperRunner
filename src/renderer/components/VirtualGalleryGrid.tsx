@@ -1,7 +1,7 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
+  useLayoutEffect,
   useRef,
   useState,
   type JSX,
@@ -26,10 +26,19 @@ const MIN_COL: Record<string, number> = {
   large: 240,
 }
 
-const ROW_EST: Record<string, number> = {
-  compact: 220,
-  comfy: 280,
-  large: 340,
+const META_EST: Record<string, number> = {
+  compact: 48,
+  comfy: 54,
+  large: 58,
+}
+const GRID_GAP = 18
+const CARD_GAP = 10
+const OVERSCAN = 4
+
+function estimateRowHeight(colWidth: number, density: string): number {
+  const coverH = colWidth * (10 / 16)
+  const meta = META_EST[density] ?? 54
+  return Math.ceil(coverH + CARD_GAP + meta + GRID_GAP)
 }
 
 export default function VirtualGalleryGrid<T>({
@@ -39,23 +48,58 @@ export default function VirtualGalleryGrid<T>({
   renderItem,
   onOpenIndex,
   className,
-  threshold = 60,
+  threshold = 80,
 }: Props<T>): JSX.Element {
   const scrollerRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
+  const scrollTopRef = useRef(0)
+  const rafRef = useRef(0)
+
   const [viewportH, setViewportH] = useState(600)
   const [cols, setCols] = useState(4)
+  const [colWidth, setColWidth] = useState(200)
+  const [measuredRowH, setMeasuredRowH] = useState(0)
   const [focusIdx, setFocusIdx] = useState(0)
-  const overscan = 2
+  const [windowRange, setWindowRange] = useState({ startRow: 0, endRow: 12 })
+
+  const estRowH = estimateRowHeight(colWidth, density)
+  const rowH = measuredRowH > 0 ? measuredRowH : estRowH
+  const rowCount = Math.ceil(items.length / cols) || 0
+  const useVirtual = items.length >= threshold
 
   const measure = useCallback(() => {
     const el = scrollerRef.current
     if (!el) return
-    const w = el.clientWidth
+    const style = getComputedStyle(el)
+    const padX =
+      (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
+    const w = Math.max(0, el.clientWidth - padX)
     const min = MIN_COL[density] ?? 180
-    setCols(Math.max(1, Math.floor(w / min)))
+    const nextCols = Math.max(1, Math.floor((w + GRID_GAP) / (min + GRID_GAP)))
+    const nextColW = (w - GRID_GAP * (nextCols - 1)) / nextCols
+    setCols(nextCols)
+    setColWidth(Math.max(1, nextColW))
     setViewportH(el.clientHeight)
   }, [density])
+
+  const syncWindow = useCallback(
+    (scrollTop: number) => {
+      if (!useVirtual) {
+        setWindowRange((prev) =>
+          prev.startRow === 0 && prev.endRow === rowCount
+            ? prev
+            : { startRow: 0, endRow: rowCount },
+        )
+        return
+      }
+      const start = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN)
+      const visible = Math.ceil(viewportH / rowH) + OVERSCAN * 2
+      const end = Math.min(rowCount, start + visible)
+      setWindowRange((prev) =>
+        prev.startRow === start && prev.endRow === end ? prev : { startRow: start, endRow: end },
+      )
+    },
+    [useVirtual, rowCount, rowH, viewportH],
+  )
 
   useEffect(() => {
     measure()
@@ -66,22 +110,30 @@ export default function VirtualGalleryGrid<T>({
     return () => ro.disconnect()
   }, [measure])
 
-  const rowH = ROW_EST[density] ?? 280
-  const rowCount = Math.ceil(items.length / cols) || 0
-  const useVirtual = items.length >= threshold
-
-  const { startRow, endRow } = useMemo(() => {
-    if (!useVirtual) return { startRow: 0, endRow: rowCount }
-    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan)
-    const visible = Math.ceil(viewportH / rowH) + overscan * 2
-    return { startRow: start, endRow: Math.min(rowCount, start + visible) }
-  }, [useVirtual, scrollTop, rowH, viewportH, rowCount, overscan])
+  const { startRow, endRow } = useVirtual
+    ? windowRange
+    : { startRow: 0, endRow: rowCount }
 
   const startIdx = startRow * cols
   const endIdx = Math.min(items.length, endRow * cols)
   const slice = useVirtual ? items.slice(startIdx, endIdx) : items
-  const padTop = useVirtual ? startRow * rowH : 0
-  const padBottom = useVirtual ? Math.max(0, (rowCount - endRow) * rowH) : 0
+  const totalH = useVirtual ? Math.max(0, rowCount * rowH - GRID_GAP) : undefined
+  const offsetY = useVirtual ? startRow * rowH : 0
+
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const cell = el.querySelector('.gallery-cell') as HTMLElement | null
+    if (!cell) return
+    const h = cell.getBoundingClientRect().height
+    if (h <= 0) return
+    const next = Math.ceil(h + GRID_GAP)
+    setMeasuredRowH((prev) => (Math.abs(prev - next) > 1 ? next : prev))
+  }, [cols, density, colWidth, startIdx, slice.length])
+
+  useEffect(() => {
+    syncWindow(scrollTopRef.current)
+  }, [syncWindow])
 
   useEffect(() => {
     if (focusIdx >= items.length) setFocusIdx(Math.max(0, items.length - 1))
@@ -110,9 +162,28 @@ export default function VirtualGalleryGrid<T>({
       const viewTop = scrollerRef.current.scrollTop
       const viewBottom = viewTop + scrollerRef.current.clientHeight
       if (top < viewTop) scrollerRef.current.scrollTop = top
-      else if (bottom > viewBottom) scrollerRef.current.scrollTop = bottom - scrollerRef.current.clientHeight
+      else if (bottom > viewBottom) {
+        scrollerRef.current.scrollTop = bottom - scrollerRef.current.clientHeight
+      }
     }
   }
+
+  const onScroll = useCallback(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    scrollTopRef.current = el.scrollTop
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0
+      syncWindow(scrollTopRef.current)
+    })
+  }, [syncWindow])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
 
   return (
     <div
@@ -120,22 +191,48 @@ export default function VirtualGalleryGrid<T>({
       className={className ?? 'gallery-grid-scroll'}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      onScroll={onScroll}
     >
-      <div style={useVirtual ? { paddingTop: padTop, paddingBottom: padBottom } : undefined}>
-        <div className="gallery-grid" data-density={density}>
-          {slice.map((item, i) => {
-            const index = useVirtual ? startIdx + i : i
-            return (
-              <div
-                key={getKey(item)}
-                className={index === focusIdx ? 'gallery-cell focused' : 'gallery-cell'}
-                onFocus={() => setFocusIdx(index)}
-              >
-                {renderItem(item, index, index === focusIdx)}
-              </div>
-            )
-          })}
+      <div
+        className="gallery-virtual-space"
+        style={useVirtual ? { height: totalH, position: 'relative' } : undefined}
+      >
+        <div
+          className="gallery-virtual-window"
+          style={
+            useVirtual
+              ? {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  transform: `translateY(${offsetY}px)`,
+                  willChange: 'transform',
+                }
+              : undefined
+          }
+        >
+          <div
+            className="gallery-grid"
+            data-density={density}
+            style={{
+              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              gap: GRID_GAP,
+            }}
+          >
+            {slice.map((item, i) => {
+              const index = useVirtual ? startIdx + i : i
+              return (
+                <div
+                  key={getKey(item)}
+                  className={index === focusIdx ? 'gallery-cell focused' : 'gallery-cell'}
+                  onFocus={() => setFocusIdx(index)}
+                >
+                  {renderItem(item, index, index === focusIdx)}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>

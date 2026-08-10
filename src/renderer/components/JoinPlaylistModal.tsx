@@ -110,9 +110,7 @@ export default function JoinPlaylistModal({
         <h3>加入播放列表</h3>
         <p className="muted join-playlist-sub">{subtitle}</p>
 
-        {playlists.length === 0 ? (
-          <p className="empty-hint">还没有播放列表，先在下方创建一个。</p>
-        ) : (
+        {playlists.length === 0 ? null : (
           <div className="playlist-picker-list">
             {playlists.map((p) => (
               <label key={p.id} className="playlist-picker-row">

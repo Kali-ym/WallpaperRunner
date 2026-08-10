@@ -1,4 +1,5 @@
-import type { JSX } from 'react'
+import { useLayoutEffect, useState, type JSX } from 'react'
+import { createPortal } from 'react-dom'
 
 export type ContextMenuItem = {
   id: string
@@ -22,12 +23,29 @@ export default function ContextMenu({
   onSelect,
   onClose,
 }: ContextMenuProps): JSX.Element {
-  return (
-    <div className="ctx-root" role="menu">
+  const [pos, setPos] = useState({ x, y })
+
+  useLayoutEffect(() => {
+    const margin = 8
+    const menu = document.querySelector<HTMLElement>('.ctx-menu[data-active="true"]')
+    const w = menu?.offsetWidth ?? 168
+    const h = menu?.offsetHeight ?? items.length * 36 + 12
+    const maxX = window.innerWidth - w - margin
+    const maxY = window.innerHeight - h - margin
+    setPos({
+      x: Math.min(Math.max(margin, x), Math.max(margin, maxX)),
+      y: Math.min(Math.max(margin, y), Math.max(margin, maxY)),
+    })
+  }, [x, y, items.length])
+
+  return createPortal(
+    <div className="ctx-root" role="presentation">
       <button type="button" className="ctx-backdrop" aria-label="关闭菜单" onClick={onClose} />
       <ul
         className="ctx-menu"
-        style={{ left: x, top: y }}
+        data-active="true"
+        role="menu"
+        style={{ left: pos.x, top: pos.y }}
         onContextMenu={(e) => e.preventDefault()}
       >
         {items.map((item) => (
@@ -47,6 +65,7 @@ export default function ContextMenu({
           </li>
         ))}
       </ul>
-    </div>
+    </div>,
+    document.body,
   )
 }

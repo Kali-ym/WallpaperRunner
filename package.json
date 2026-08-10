@@ -7,7 +7,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
+    "predev": "node scripts/build-icon.mjs",
     "build": "electron-vite build",
+    "build:icon": "node scripts/build-icon.mjs",
+    "prebuild": "node scripts/build-icon.mjs",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -22,11 +25,13 @@
     "node-unrar-js": "^2.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^6.2.3",
     "telegram": "^2.26.22",
     "undici": "^8.10.0",
     "yet-another-react-lightbox": "^3.32.2"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.20.1",
     "@types/react": "^18.3.18",
@@ -36,6 +41,7 @@
     "electron": "^43.3.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^3.0.0",
+    "png-to-ico": "^3.0.2",
     "tsx": "^4.23.11",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
@@ -54,7 +60,14 @@
       "package.json"
     ],
     "asar": true,
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
         {

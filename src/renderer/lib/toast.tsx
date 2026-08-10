@@ -47,30 +47,38 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
     [dismiss],
   )
 
+  const success = useCallback((message: string) => push('success', message), [push])
+  const error = useCallback((message: string) => push('error', message), [push])
+  const info = useCallback((message: string) => push('info', message), [push])
+
   const value = useMemo<ToastContextValue>(
     () => ({
       toasts,
       dismiss,
-      success: (message) => push('success', message),
-      error: (message) => push('error', message),
-      info: (message) => push('info', message),
+      success,
+      error,
+      info,
     }),
-    [toasts, dismiss, push],
+    [toasts, dismiss, success, error, info],
   )
 
   return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>
 }
 
+/** Stable toast API — must keep a stable identity across renders (used in effect deps). */
 export function useToast(): ToastApi {
   const ctx = useContext(ToastContext)
-  if (!ctx) {
+  const success = ctx?.success
+  const error = ctx?.error
+  const info = ctx?.info
+  const api = useMemo(
+    () => (success && error && info ? { success, error, info } : null),
+    [success, error, info],
+  )
+  if (!api) {
     throw new Error('useToast must be used within ToastProvider')
   }
-  return {
-    success: ctx.success,
-    error: ctx.error,
-    info: ctx.info,
-  }
+  return api
 }
 
 export function useToastState(): ToastContextValue {

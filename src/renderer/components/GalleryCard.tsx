@@ -39,9 +39,14 @@ function GalleryCard({
       })
     : undefined
 
+  function onCardActivate(): void {
+    if (selectMode) onToggleSelect?.(entry)
+    else onOpen(entry)
+  }
+
   return (
-    <div
-      className={`gallery-card ${selected ? 'selected' : ''}`}
+    <article
+      className={`card${selected ? ' selected' : ''}${selectMode ? ' select-mode' : ''}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => {
         setHover(false)
@@ -49,53 +54,89 @@ function GalleryCard({
       }}
     >
       {selectMode ? (
-        <label className="card-check">
-          <input
-            type="checkbox"
-            checked={Boolean(selected)}
-            onChange={() => onToggleSelect?.(entry)}
-          />
-        </label>
+        <span className={`card-check${selected ? ' is-checked' : ''}`} aria-hidden>
+          <svg viewBox="0 0 24 24" fill="none">
+            {selected ? (
+              <path
+                d="M7.5 12.2l3 3 6.2-6.2"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : null}
+          </svg>
+        </span>
       ) : null}
-      <button
-        type="button"
-        className="fav-btn"
-        title={entry.favorite ? '取消收藏' : '收藏'}
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggleFavorite?.(entry)
-        }}
-      >
-        {entry.favorite ? '★' : '☆'}
-      </button>
-      <button type="button" className="gallery-card-main" onClick={() => onOpen(entry)}>
-        <div className="gallery-card-cover">
+      <button type="button" className="card-hit" onClick={onCardActivate}>
+        <div className="cover">
           {cover ? (
-            <img src={cover} alt={labelOf(entry)} loading="lazy" decoding="async" />
+            <img className="art" src={cover} alt="" loading="lazy" decoding="async" />
           ) : (
-            <div className="cover-empty">无封面</div>
+            <div className="art cover-empty">无封面</div>
           )}
-          {hover && preview ? (
+          {hover && preview && !selectMode ? (
             <img
-              className={`gallery-card-preview${previewReady ? ' is-ready' : ''}`}
+              className={`art gallery-card-preview${previewReady ? ' is-ready' : ''}`}
               src={preview}
               alt=""
               decoding="async"
               onLoad={() => setPreviewReady(true)}
             />
           ) : null}
-        </div>
-        <div className="gallery-card-body">
-          <h3>{labelOf(entry)}</h3>
-          <p className="muted">
-            {entry.author || '未知作者'} · {entry.imageCount} 张
-          </p>
-          {entry.tags.length > 0 ? (
-            <p className="tags muted">{entry.tags.slice(0, 3).join(' · ')}</p>
+          {!selectMode ? (
+            <span className="cover-author" title={entry.author || '未知作者'}>
+              {entry.author || '未知作者'}
+            </span>
+          ) : null}
+          <span className="count-badge">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect
+                x="4"
+                y="6"
+                width="16"
+                height="12"
+                rx="2"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+            </svg>
+            {entry.imageCount}
+          </span>
+          {!selectMode ? (
+            <div className="overlay" aria-hidden>
+              <span className="open-label">打开</span>
+            </div>
           ) : null}
         </div>
       </button>
-    </div>
+      <div className="card-meta">
+        <button
+          type="button"
+          className={`card-fav${entry.favorite ? ' is-fav' : ''}`}
+          title={entry.favorite ? '取消收藏' : '收藏'}
+          aria-label={entry.favorite ? '取消收藏' : '收藏'}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleFavorite?.(entry)
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
+              fill={entry.favorite ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button type="button" className="title card-title-btn" onClick={onCardActivate}>
+          {labelOf(entry)}
+        </button>
+      </div>
+    </article>
   )
 }
 

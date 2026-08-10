@@ -12,6 +12,8 @@ export type {
   LibraryFilters,
   TagStat,
   AuthorStat,
+  AuthorAvatarRecord,
+  AuthorImageSource,
   QueueTask,
   ResourceManifest,
   DownloadSource,

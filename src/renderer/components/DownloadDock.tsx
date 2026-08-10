@@ -34,46 +34,49 @@ export default function DownloadDock({ tasks, onOpenDownload }: Props): JSX.Elem
   const eta = active.find((t) => t.etaSec != null)?.etaSec
 
   return (
-    <aside className={`download-dock ${expanded ? 'expanded' : ''}`} aria-live="polite">
+    <aside
+      className={`dock show${expanded ? ' expanded' : ''}`}
+      id="dock"
+      aria-live="polite"
+    >
       <button
         type="button"
-        className="download-dock-toggle"
+        className="dock-toggle"
+        aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
       >
-        <span>
+        <span id="dock-summary">
           下载中 {active.length}
           {totalSum > 0 ? ` · ${pct}%` : ''}
           {speed ? ` · ${Math.round(speed / 1024)} KB/s` : ''}
           {eta != null && eta > 0 ? ` · ETA ${eta}s` : ''}
         </span>
-        <span className="download-dock-chevron" aria-hidden>
+        <span className="dock-chevron" aria-hidden="true">
           {expanded ? '▾' : '▴'}
         </span>
       </button>
-      <div className="download-dock-bar" aria-hidden>
-        <div className="download-dock-bar-fill" style={{ width: `${pct}%` }} />
+      <div className="dock-bar" aria-hidden="true">
+        <i id="dock-fill" style={{ width: `${pct}%` }} />
       </div>
-      {expanded ? (
-        <div className="download-dock-body">
-          <ul className="download-dock-list">
-            {active.slice(0, 8).map((t) => (
-              <li key={t.id}>
-                <span className="download-dock-title" title={labelOf(t)}>
-                  {labelOf(t)}
-                </span>
-                <span className="muted">
-                  {t.status}
-                  {t.total > 0 ? ` ${t.done}/${t.total}` : ''}
-                  {t.percent != null ? ` ${Math.round(t.percent)}%` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button type="button" className="btn" onClick={onOpenDownload}>
-            打开下载页
-          </button>
-        </div>
-      ) : null}
+      <div className="dock-body" id="dock-body">
+        <ul className="dock-list" id="dock-list">
+          {active.slice(0, 8).map((t) => (
+            <li key={t.id} onClick={onOpenDownload}>
+              <span className="dock-item-title" title={labelOf(t)}>
+                {labelOf(t)}
+              </span>
+              <span className="dock-item-status">
+                {t.status}
+                {t.total > 0 ? ` ${t.done}/${t.total}` : ''}
+                {t.percent != null ? ` ${Math.round(t.percent)}%` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="btn" onClick={onOpenDownload}>
+          打开下载页
+        </button>
+      </div>
     </aside>
   )
 }

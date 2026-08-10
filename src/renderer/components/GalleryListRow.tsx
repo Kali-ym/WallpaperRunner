@@ -31,10 +31,19 @@ function GalleryListRow({
     : undefined
   const date = entry.downloadedAt.slice(0, 10)
 
+  function onRowActivate(): void {
+    if (selectMode) onToggleSelect?.(entry)
+    else onOpen(entry)
+  }
+
   return (
-    <div className={`gallery-list-row ${selected ? 'selected' : ''}`}>
+    <div className={`gallery-list-row${selected ? ' selected' : ''}${selectMode ? ' select-mode' : ''}`}>
       {selectMode ? (
-        <label className="card-check">
+        <label
+          className="card-check list-check"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <input
             type="checkbox"
             checked={Boolean(selected)}
@@ -42,7 +51,7 @@ function GalleryListRow({
           />
         </label>
       ) : null}
-      <button type="button" className="gallery-list-main" onClick={() => onOpen(entry)}>
+      <button type="button" className="gallery-list-main" onClick={onRowActivate}>
         <div className="gallery-list-thumb">
           {cover ? (
             <img src={cover} alt="" loading="lazy" decoding="async" />
@@ -61,7 +70,10 @@ function GalleryListRow({
         type="button"
         className="fav-btn list-fav"
         title={entry.favorite ? '取消收藏' : '收藏'}
-        onClick={() => onToggleFavorite?.(entry)}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleFavorite?.(entry)
+        }}
       >
         {entry.favorite ? '★' : '☆'}
       </button>

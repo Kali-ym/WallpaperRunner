@@ -301,6 +301,33 @@ export class LibraryStore extends EventEmitter {
     return meta
   }
 
+  /** Rename an author on every gallery that currently uses `from`. */
+  async renameAuthor(from: string, to: string): Promise<number> {
+    const fromNeedle = from.trim().toLowerCase()
+    const newName = to.trim()
+    if (!fromNeedle) throw new Error('原作者名不能为空')
+    if (!newName) throw new Error('新作者名不能为空')
+
+    const entries = await this.loadIndex()
+    const matches = entries.filter((e) => e.author?.trim().toLowerCase() === fromNeedle)
+    if (matches.length === 0) return 0
+
+    await Promise.all(
+      matches.map(async (entry) => {
+        const meta = await this.readMetaAt(entry.dirName)
+        if (!meta) return
+        meta.author = newName
+        await this.writeMetaAt(entry.dirName, meta)
+      }),
+    )
+
+    const next = entries.map((e) =>
+      e.author?.trim().toLowerCase() === fromNeedle ? { ...e, author: newName } : e,
+    )
+    await this.saveIndex(next)
+    return matches.length
+  }
+
   async setFavorite(source: string, galleryId: string, favorite: boolean): Promise<GalleryMetadata> {
     const hit = await this.findEntry(source, galleryId)
     if (!hit) throw new Error('套图不存在')

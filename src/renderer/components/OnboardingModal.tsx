@@ -116,7 +116,6 @@ export default function OnboardingModal({ initial, onDone }: Props): JSX.Element
                 <span className="muted"> — 解析 telegra.ph 文章中的图片</span>
               </li>
             </ul>
-            <p className="muted">库页可拖入本地文件夹导入已有图集。</p>
           </>
         ) : null}
 

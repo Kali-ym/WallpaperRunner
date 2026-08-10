@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useMemo, type JSX } from 'react'
 import Lightbox from 'yet-another-react-lightbox'
 import Zoom from 'yet-another-react-lightbox/plugins/zoom'
 import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
@@ -41,10 +41,15 @@ export default function GalleryLightbox({
       on={{ view: ({ index: i }) => onIndexChange(i) }}
       controller={{ closeOnBackdropClick: true }}
       zoom={{ maxZoomPixelRatio: 4, scrollToZoom: true }}
-      thumbnails={{ position: 'bottom', border: 0, border: 1, imageFit: 'cover' }}
+      thumbnails={{ position: 'bottom', border: 1, imageFit: 'cover' }}
+      carousel={{ padding: '48px 16px', spacing: 0 }}
       styles={{
-        container: { backgroundColor: 'rgba(12, 14, 13, 0.94)' },
+        container: {
+          backgroundColor: 'color-mix(in oklab, var(--bg) 96%, transparent)',
+          backdropFilter: 'blur(14px)',
+        },
       }}
+      className="gallery-lightbox"
     />
   )
 }

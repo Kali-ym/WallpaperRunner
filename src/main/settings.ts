@@ -25,8 +25,6 @@ export interface AppSettings {
   theme: ThemePreference
   /** First-run wizard completed */
   onboardingDone: boolean
-  /** Hours between subscription checks while app is running; 0 = manual only */
-  subscriptionCheckHours: number
 }
 
 function defaultSettings(): AppSettings {
@@ -48,7 +46,6 @@ function defaultSettings(): AppSettings {
     telegramApiHash: '',
     theme: 'light',
     onboardingDone: false,
-    subscriptionCheckHours: 6,
   }
 }
 
@@ -93,10 +90,6 @@ export async function loadSettings(): Promise<AppSettings> {
           ? parsed.theme
           : defaults.theme,
       onboardingDone,
-      subscriptionCheckHours:
-        typeof parsed.subscriptionCheckHours === 'number' && parsed.subscriptionCheckHours >= 0
-          ? Math.floor(parsed.subscriptionCheckHours)
-          : defaults.subscriptionCheckHours,
     }
     setHttpProxy(settings.proxyUrl || null)
     return settings
@@ -145,10 +138,6 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
       typeof partial.onboardingDone === 'boolean'
         ? partial.onboardingDone
         : current.onboardingDone,
-    subscriptionCheckHours:
-      typeof partial.subscriptionCheckHours === 'number' && partial.subscriptionCheckHours >= 0
-        ? Math.floor(partial.subscriptionCheckHours)
-        : current.subscriptionCheckHours,
   }
   await mkdir(app.getPath('userData'), { recursive: true })
   await writeFile(settingsPath(), JSON.stringify(next, null, 2), 'utf8')

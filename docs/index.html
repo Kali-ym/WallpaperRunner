@@ -1,0 +1,4874 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WallpaperRunner</title>
+  <style>
+    :root, html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: oklch(16% 0.012 55);
+      --bg-deep: oklch(12% 0.01 55);
+      --surface: oklch(20% 0.014 55);
+      --surface-2: oklch(24% 0.016 55);
+      --fg: oklch(94% 0.012 75);
+      --muted: oklch(68% 0.02 70);
+      --border: oklch(32% 0.016 55);
+      --accent: oklch(76% 0.16 62);
+      --accent-strong: oklch(70% 0.17 55);
+      --accent-ink: oklch(18% 0.03 55);
+      --danger: oklch(68% 0.18 25);
+      --ok: oklch(72% 0.14 150);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --rail-w: 248px;
+      --header-h: 64px;
+      --font-display: "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --font-body: "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+      --font-mono: "Cascadia Mono", "JetBrains Mono", "Consolas", ui-monospace, monospace;
+      --shadow-soft: 0 12px 40px oklch(0% 0 0 / 0.45);
+      --focus: 0 0 0 2px oklch(16% 0.012 55), 0 0 0 4px oklch(76% 0.16 62 / 0.55);
+      --hairline: oklch(100% 0 0 / 0.07);
+      --hover-fill: oklch(100% 0 0 / 0.05);
+      --input-bg: oklch(12% 0.01 55);
+      --elevated: color-mix(in oklab, var(--surface) 92%, white 4%);
+      --wash: oklch(100% 0 0 / 0.03);
+      --app-grad-a: oklch(50% 0.1 55 / 0.18);
+      --app-grad-b: oklch(40% 0.06 250 / 0.12);
+      --app-grad-c: oklch(18% 0.014 55);
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg: oklch(96% 0.012 75);
+      --bg-deep: oklch(93% 0.014 75);
+      --surface: oklch(99% 0.006 75);
+      --surface-2: oklch(97% 0.01 75);
+      --fg: oklch(22% 0.02 55);
+      --muted: oklch(48% 0.02 55);
+      --border: oklch(88% 0.016 70);
+      --accent: oklch(58% 0.14 55);
+      --accent-strong: oklch(52% 0.15 55);
+      --accent-ink: oklch(98% 0.01 75);
+      --danger: oklch(55% 0.18 25);
+      --ok: oklch(48% 0.12 150);
+      --shadow-soft: 0 14px 36px oklch(30% 0.02 55 / 0.1);
+      --focus: 0 0 0 2px oklch(96% 0.012 75), 0 0 0 4px oklch(58% 0.14 55 / 0.4);
+      --hairline: oklch(0% 0 0 / 0.06);
+      --hover-fill: oklch(0% 0 0 / 0.04);
+      --input-bg: oklch(100% 0.004 75);
+      --elevated: var(--surface);
+      --wash: oklch(0% 0 0 / 0.02);
+      --app-grad-a: oklch(70% 0.06 55 / 0.18);
+      --app-grad-b: oklch(80% 0.03 80 / 0.2);
+      --app-grad-c: oklch(96% 0.012 75);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--bg-deep);
+      color: var(--fg);
+      font: 14px/1.5 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    button, input { font: inherit; color: inherit; }
+    button {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    button:focus-visible,
+    input:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+    ::placeholder { color: oklch(55% 0.02 70); }
+    ::selection { background: oklch(76% 0.16 62 / 0.35); }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: var(--header-h) 1fr;
+      background:
+        radial-gradient(ellipse 55% 40% at 8% -10%, var(--app-grad-a), transparent 55%),
+        radial-gradient(ellipse 40% 35% at 92% 0%, var(--app-grad-b), transparent 50%),
+        linear-gradient(180deg, var(--app-grad-c) 0%, var(--bg-deep) 100%);
+    }
+
+    /* —— 顶栏 —— */
+    .header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 20px;
+      padding: 0 20px 0 18px;
+      border-bottom: 1px solid oklch(100% 0 0 / 0.06);
+      background: oklch(18% 0.014 55 / 0.72);
+      backdrop-filter: blur(16px) saturate(1.2);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      z-index: 30;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 4px 6px 4px 2px;
+      border-radius: 10px;
+    }
+    .brand:hover { background: oklch(100% 0 0 / 0.04); }
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .search {
+      justify-self: center;
+      width: min(480px, 100%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 40px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 1px solid oklch(100% 0 0 / 0.08);
+      background: oklch(12% 0.01 55 / 0.85);
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+    .search:focus-within {
+      border-color: oklch(76% 0.16 62 / 0.55);
+      background: oklch(14% 0.012 55);
+      box-shadow: 0 0 0 3px oklch(76% 0.16 62 / 0.12);
+    }
+    .search svg { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
+    .search input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      outline: none;
+      font-size: 0.95rem;
+    }
+    .search kbd {
+      font: 11px/1 var(--font-mono);
+      letter-spacing: 0.04em;
+      color: oklch(55% 0.02 70);
+      border: 1px solid oklch(100% 0 0 / 0.08);
+      border-radius: 6px;
+      padding: 3px 6px;
+      background: oklch(100% 0 0 / 0.03);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .icon-btn {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      transition: background 0.15s, color 0.15s;
+    }
+    .icon-btn:hover { background: oklch(100% 0 0 / 0.06); }
+    .icon-btn.active {
+      background: oklch(76% 0.16 62 / 0.16);
+      color: var(--accent);
+    }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .icon-btn .dot {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      min-width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 2px var(--bg);
+    }
+
+    /* —— 主体 —— */
+    .body {
+      display: grid;
+      grid-template-columns: var(--rail-w) 1fr;
+      min-height: 0;
+    }
+
+    /* —— 侧栏 —— */
+    .rail {
+      border-right: 1px solid oklch(100% 0 0 / 0.06);
+      background: oklch(17% 0.012 55 / 0.55);
+      backdrop-filter: blur(10px);
+      padding: 14px 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow: auto;
+      min-height: 0;
+    }
+    .rail::-webkit-scrollbar { width: 8px; }
+    .rail::-webkit-scrollbar-thumb {
+      background: oklch(100% 0 0 / 0.1);
+      border-radius: 999px;
+    }
+    .rail-section {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 10px;
+    }
+    .rail-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: oklch(55% 0.02 70);
+      padding: 10px 12px 6px;
+    }
+    .rail-item {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      padding: 9px 12px;
+      border-radius: 10px;
+      color: var(--fg);
+      position: relative;
+      transition: background 0.12s;
+    }
+    .rail-item:hover { background: oklch(100% 0 0 / 0.05); }
+    .rail-item.active {
+      background: oklch(76% 0.16 62 / 0.12);
+      color: var(--fg);
+    }
+    .rail-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--accent);
+    }
+    .rail-item .ico {
+      width: 18px;
+      height: 18px;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+    }
+    .rail-item.active .ico { color: var(--accent); }
+    .rail-item .name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.92rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .rail-item .count {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+    .rail-item.avatar-row {
+      grid-template-columns: 28px 1fr auto;
+    }
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      color: oklch(92% 0.02 75);
+      background: linear-gradient(145deg, oklch(40% 0.06 55), oklch(28% 0.04 250));
+      border: 1px solid oklch(100% 0 0 / 0.08);
+    }
+    .link-more {
+      align-self: flex-start;
+      margin: 4px 12px 0;
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 550;
+      letter-spacing: 0.01em;
+      padding: 4px 0;
+    }
+    .link-more:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+    .rail-spacer { flex: 1; min-height: 12px; }
+
+    .btn-new-list {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px dashed oklch(76% 0.16 62 / 0.45);
+      color: var(--accent);
+      font-weight: 550;
+      letter-spacing: 0.02em;
+      background: oklch(76% 0.16 62 / 0.06);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-new-list:hover {
+      background: oklch(76% 0.16 62 / 0.12);
+      border-color: var(--accent);
+    }
+    .btn-new-list svg { width: 16px; height: 16px; }
+
+    /* —— 主区 —— */
+    .main {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
+    .view.active { display: flex; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 22px 8px;
+    }
+    .toolbar h2 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .toolbar .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .sort-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: oklch(100% 0 0 / 0.04);
+      border: 1px solid oklch(100% 0 0 / 0.06);
+      border-radius: 999px;
+      padding: 3px;
+    }
+    .sort-group button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 550;
+      letter-spacing: 0.02em;
+    }
+    .sort-group button[aria-pressed="true"] {
+      background: var(--surface-2);
+      color: var(--fg);
+      box-shadow: 0 1px 2px oklch(0% 0 0 / 0.25);
+    }
+
+    .grid-scroll {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 10px 22px 100px;
+    }
+    .grid-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+    .grid-scroll::-webkit-scrollbar-thumb {
+      background: oklch(100% 0 0 / 0.12);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+    }
+    @media (max-width: 1280px) {
+      .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .body { grid-template-columns: 200px 1fr; }
+      :root { --rail-w: 200px; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .brand-name { font-size: 1rem; }
+    }
+    @media (max-width: 720px) {
+      .body { grid-template-columns: 1fr; }
+      .rail { display: none; }
+      .grid { grid-template-columns: 1fr; }
+      .search kbd { display: none; }
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      text-align: left;
+      border-radius: var(--radius);
+      transition: transform 0.18s ease;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card:focus-visible { border-radius: var(--radius); box-shadow: var(--focus); }
+
+    .cover {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid oklch(100% 0 0 / 0.05);
+      isolation: isolate;
+    }
+    .cover .art {
+      position: absolute;
+      inset: 0;
+      transition: transform 0.35s ease;
+    }
+    .card:hover .cover .art { transform: scale(1.04); }
+    .cover .type {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 2;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 6px;
+      color: oklch(96% 0.01 75);
+      background: oklch(0% 0 0 / 0.45);
+      backdrop-filter: blur(8px);
+    }
+    .cover .count-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: oklch(96% 0.01 75);
+      background: oklch(0% 0 0 / 0.5);
+      backdrop-filter: blur(8px);
+      border: 1px solid oklch(100% 0 0 / 0.08);
+    }
+    .cover .count-badge svg {
+      width: 12px;
+      height: 12px;
+      opacity: 0.9;
+    }
+    .cover .stack {
+      position: absolute;
+      inset: auto 10px 10px auto;
+      z-index: 2;
+      width: 28px;
+      height: 22px;
+      pointer-events: none;
+    }
+    .cover .stack i {
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      border: 1px solid oklch(100% 0 0 / 0.18);
+      background: oklch(100% 0 0 / 0.1);
+    }
+    .cover .stack i:nth-child(1) { transform: translate(6px, -6px); opacity: 0.35; }
+    .cover .stack i:nth-child(2) { transform: translate(3px, -3px); opacity: 0.55; }
+    .cover .stack i:nth-child(3) { opacity: 0; }
+    .cover .overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(180deg, transparent 55%, oklch(0% 0 0 / 0.45));
+      opacity: 0;
+      transition: opacity 0.2s;
+      display: grid;
+      place-items: end center;
+      padding-bottom: 12px;
+    }
+    .card:hover .cover .overlay { opacity: 1; }
+    .cover .open-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: oklch(76% 0.16 62 / 0.92);
+      color: var(--accent-ink);
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+
+    .card-meta {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 10px;
+      align-items: start;
+      padding: 0 2px;
+    }
+    .card-meta .title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-meta .author {
+      grid-column: 1;
+      font-size: 0.82rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .card-actions {
+      grid-row: 1 / span 2;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-top: 1px;
+    }
+    .ghost-ico {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .ghost-ico:hover {
+      background: oklch(100% 0 0 / 0.06);
+      color: var(--fg);
+    }
+    .ghost-ico.is-fav {
+      color: var(--accent);
+    }
+    .ghost-ico svg { width: 16px; height: 16px; }
+
+    .empty {
+      margin: 48px auto;
+      max-width: 320px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty h3 {
+      color: var(--fg);
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+
+    /* —— 壁纸艺术块（无外部图） —— */
+    .art-a {
+      background:
+        radial-gradient(ellipse 80% 60% at 70% 30%, oklch(70% 0.18 55 / 0.55), transparent 55%),
+        radial-gradient(ellipse 50% 70% at 20% 80%, oklch(45% 0.12 250 / 0.5), transparent 60%),
+        linear-gradient(135deg, oklch(22% 0.04 250), oklch(28% 0.08 40));
+    }
+    .art-b {
+      background:
+        linear-gradient(180deg, oklch(55% 0.14 55 / 0.7) 0%, transparent 45%),
+        linear-gradient(200deg, oklch(35% 0.08 30), oklch(18% 0.04 250) 70%, oklch(25% 0.06 55));
+    }
+    .art-c {
+      background:
+        radial-gradient(circle at 30% 40%, oklch(75% 0.12 95 / 0.5), transparent 40%),
+        radial-gradient(circle at 75% 70%, oklch(50% 0.16 340 / 0.35), transparent 45%),
+        linear-gradient(160deg, oklch(20% 0.06 300), oklch(30% 0.05 200));
+    }
+    .art-d {
+      background:
+        linear-gradient(90deg, oklch(30% 0.1 150 / 0.4), transparent 40%),
+        linear-gradient(180deg, oklch(45% 0.08 220) 0%, oklch(18% 0.04 40) 100%);
+    }
+    .art-e {
+      background:
+        radial-gradient(ellipse 90% 50% at 50% 100%, oklch(65% 0.18 55 / 0.45), transparent 55%),
+        linear-gradient(180deg, oklch(35% 0.06 250), oklch(15% 0.03 55));
+    }
+    .art-f {
+      background:
+        conic-gradient(from 210deg at 40% 50%, oklch(50% 0.12 25), oklch(30% 0.08 250), oklch(55% 0.1 95), oklch(50% 0.12 25)),
+        linear-gradient(oklch(18% 0.03 55), oklch(18% 0.03 55));
+      filter: saturate(0.9);
+    }
+    .art-g {
+      background:
+        radial-gradient(circle at 60% 35%, oklch(80% 0.05 95 / 0.35), transparent 30%),
+        linear-gradient(165deg, oklch(28% 0.05 250), oklch(22% 0.07 20) 55%, oklch(40% 0.1 55));
+    }
+    .art-h {
+      background:
+        linear-gradient(120deg, oklch(35% 0.12 340 / 0.5), transparent 50%),
+        linear-gradient(300deg, oklch(30% 0.1 220 / 0.45), oklch(16% 0.03 55));
+    }
+
+    /* —— 下载浮层（对齐真实 DownloadDock：摘要 + 细条 + 可展开列表） —— */
+    .dock {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      width: min(320px, calc(100% - 32px));
+      border-radius: var(--radius, 12px);
+      border: 1px solid var(--border);
+      background: color-mix(in oklab, var(--surface) 94%, transparent);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: var(--shadow-soft);
+      z-index: 40;
+      display: none;
+      overflow: hidden;
+    }
+    .dock.show { display: block; }
+    .dock-toggle {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      font-size: 0.875rem;
+      text-align: left;
+      cursor: pointer;
+      font-variant-numeric: tabular-nums;
+    }
+    .dock-toggle:hover { background: oklch(100% 0 0 / 0.03); }
+    .dock-toggle > span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .dock-chevron {
+      color: var(--muted);
+      flex-shrink: 0;
+      line-height: 1;
+      font-size: 0.8rem;
+    }
+    .dock-bar {
+      height: 3px;
+      background: color-mix(in oklab, var(--border) 70%, var(--bg));
+    }
+    .dock-bar > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.2s ease;
+    }
+    .dock-body {
+      display: none;
+      padding: 8px 12px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .dock.expanded .dock-body { display: block; }
+    .dock-list {
+      list-style: none;
+      margin: 0 0 10px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .dock-list li {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 2px 0;
+    }
+    .dock-list li:hover .dock-item-title { color: var(--accent); }
+    .dock-item-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--fg);
+    }
+    .dock-item-status {
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .dock-body > .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    /* —— 获取 / 设置：统一工作台 —— */
+    .panel {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 20px 24px 48px;
+    }
+    .panel.wide { padding: 18px 22px 40px; }
+    .page-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px 20px;
+      margin-bottom: 14px;
+      max-width: 1120px;
+    }
+    .page-head h2 {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
+    .page-head .lead {
+      color: var(--muted);
+      margin-top: 4px;
+      max-width: 56ch;
+      font-size: 0.9rem;
+    }
+    .page-stats {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--wash);
+      font-size: 0.78rem;
+      font-weight: 550;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-chip strong {
+      color: var(--fg);
+      font-weight: 650;
+      font-family: var(--font-mono);
+    }
+    .stat-chip.live {
+      color: var(--accent-strong);
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .stat-chip.bad {
+      color: var(--danger);
+      border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
+      background: color-mix(in oklab, var(--danger) 10%, transparent);
+    }
+
+    .work-shell { max-width: 1120px; }
+    .work-layout {
+      display: grid;
+      grid-template-columns: 176px minmax(0, 1fr);
+      min-height: min(640px, calc(100vh - 150px));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+      overflow: hidden;
+      box-shadow: 0 1px 0 var(--hairline);
+    }
+    @media (max-width: 820px) {
+      .work-layout {
+        grid-template-columns: 1fr;
+        min-height: 0;
+      }
+      .work-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .work-nav-btn { flex: 1 1 auto; min-width: 96px; }
+    }
+    .work-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 12px 10px;
+      border-right: 1px solid var(--border);
+      background: color-mix(in oklab, var(--bg-deep) 55%, var(--surface));
+    }
+    .work-nav-label {
+      font-size: 0.68rem;
+      font-weight: 650;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 6px 10px 8px;
+    }
+    .work-nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: var(--muted);
+      font-weight: 550;
+      letter-spacing: 0.01em;
+      transition: background 0.12s, color 0.12s;
+    }
+    .work-nav-btn:hover {
+      color: var(--fg);
+      background: var(--hover-fill);
+    }
+    .work-nav-btn.active {
+      color: var(--accent-strong);
+      background: color-mix(in oklab, var(--accent) 14%, transparent);
+      font-weight: 650;
+    }
+    .work-nav-btn .nav-count {
+      min-width: 22px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--wash);
+      border: 1px solid var(--border);
+    }
+    .work-nav-btn.active .nav-count {
+      color: var(--accent-strong);
+      border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .work-body {
+      min-width: 0;
+      overflow: auto;
+      padding: 22px 24px 28px;
+    }
+    .work-pane { display: none; }
+    .work-pane.active { display: block; }
+    .pane-title {
+      font-size: 1.02rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin: 0 0 4px;
+    }
+    .pane-sub {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin: 0 0 18px;
+      max-width: 58ch;
+      line-height: 1.5;
+    }
+
+    .composer { display: grid; gap: 16px; max-width: 760px; }
+    .source-cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 640px) {
+      .source-cards { grid-template-columns: 1fr; }
+    }
+    .source-card {
+      text-align: left;
+      padding: 12px 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--fg);
+      transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+    }
+    .source-card:hover {
+      border-color: color-mix(in oklab, var(--accent) 25%, var(--border));
+    }
+    .source-card.active {
+      border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+      background: color-mix(in oklab, var(--accent) 10%, var(--input-bg));
+      box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
+    }
+    .source-card .sc-name {
+      display: block;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      font-size: 0.92rem;
+    }
+    .source-card .sc-desc {
+      display: block;
+      margin-top: 3px;
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .url-composer {
+      border: 1px dashed color-mix(in oklab, var(--border) 80%, var(--muted));
+      border-radius: 14px;
+      background: var(--input-bg);
+      overflow: hidden;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+    .url-composer.over,
+    .url-composer:focus-within {
+      border-style: solid;
+      border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+    }
+    .url-composer.over {
+      background: color-mix(in oklab, var(--accent) 8%, var(--input-bg));
+    }
+    .url-composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 168px;
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      padding: 16px 16px 12px;
+      resize: vertical;
+      outline: none;
+      font-family: var(--font-mono);
+      font-size: 0.86rem;
+      line-height: 1.55;
+    }
+    .url-composer-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--hairline);
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .composer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .composer-actions .spacer { flex: 1; min-width: 8px; }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 6px;
+    }
+    @media (max-width: 640px) {
+      .quick-grid { grid-template-columns: 1fr; }
+    }
+    .quick-card {
+      padding: 12px 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: color-mix(in oklab, var(--bg-deep) 40%, var(--surface));
+    }
+    .quick-card .qk-title {
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .quick-card .qk-body {
+      font-size: 0.84rem;
+      color: var(--fg);
+      line-height: 1.45;
+    }
+
+    .segment-tabs, .segment-tab, .source-seg, .source-seg-btn, .drop-zone { display: none; }
+    .surface-card {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+    }
+    .acquire-pane { display: none; }
+    .acquire-pane.active { display: block; }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .field label,
+    .field > span.label {
+      font-size: 0.84rem;
+      font-weight: 550;
+      letter-spacing: 0.01em;
+      color: var(--muted);
+    }
+    .field textarea,
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="password"],
+    .field select,
+    .text-input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--fg);
+      padding: 10px 12px;
+      resize: vertical;
+      outline: none;
+      font: inherit;
+    }
+    .field textarea:focus,
+    .field input:focus,
+    .field select:focus,
+    .text-input:focus {
+      border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+    }
+    .field textarea {
+      min-height: 120px;
+      font-family: var(--font-mono);
+      font-size: 0.86rem;
+      line-height: 1.55;
+    }
+    .field.narrow input,
+    .text-input.narrow { max-width: 140px; }
+    .field.inline-check {
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .field.inline-check input { width: auto; accent-color: var(--accent); }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .row.grow > .text-input { flex: 1; min-width: 180px; }
+    .btn {
+      height: 38px;
+      padding: 0 15px;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.12s, transform 0.1s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.tiny {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 0.8rem;
+      border-radius: 8px;
+      font-weight: 550;
+      background: var(--hover-fill);
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .btn.tiny:hover { background: color-mix(in oklab, var(--hover-fill) 70%, var(--accent) 8%); }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      filter: none;
+    }
+    .btn-ghost {
+      background: var(--hover-fill);
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .btn-ghost:hover {
+      background: color-mix(in oklab, var(--hover-fill) 60%, var(--accent) 8%);
+    }
+    .btn.danger {
+      background: color-mix(in oklab, var(--danger) 16%, transparent);
+      border: 1px solid color-mix(in oklab, var(--danger) 35%, transparent);
+      color: var(--danger);
+    }
+    .btn.danger:hover {
+      background: color-mix(in oklab, var(--danger) 24%, transparent);
+    }
+
+    .queue-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .queue-toolbar .lead-sm {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .task-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: color-mix(in oklab, var(--bg-deep) 25%, var(--surface));
+    }
+    .task-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      transition: background 0.12s;
+    }
+    .task-item:last-child { border-bottom: 0; }
+    .task-item:hover { background: var(--hover-fill); }
+    .task-item.status-downloading { box-shadow: inset 3px 0 0 var(--accent); }
+    .task-item.status-paused {
+      opacity: 0.92;
+      box-shadow: inset 3px 0 0 color-mix(in oklab, var(--muted) 50%, transparent);
+    }
+    .task-item.status-failed { box-shadow: inset 3px 0 0 var(--danger); }
+    .task-item.status-done { opacity: 0.88; }
+    .task-main {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+    .task-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .task-title-row strong {
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .task-meta {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 2px;
+    }
+    .task-meta .mono-num {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+    .task-meta .st {
+      color: var(--fg);
+      font-weight: 550;
+    }
+    .task-meta .st.is-fail { color: var(--danger); }
+    .task-meta .st.is-ok { color: var(--ok); }
+    .task-meta .st.is-run { color: var(--accent-strong); }
+    .progress-track {
+      height: 5px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--muted) 18%, transparent);
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 100%;
+      transform-origin: left center;
+      background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+      transition: transform 0.22s ease;
+    }
+    .task-error {
+      color: var(--danger);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+    .task-files {
+      list-style: none;
+      margin: 4px 0 0;
+      padding: 8px 0 0;
+      border-top: 1px solid var(--border);
+      display: grid;
+      gap: 4px;
+      max-height: 200px;
+      overflow: auto;
+    }
+    .task-file {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px 12px;
+      font-size: 0.8rem;
+      color: var(--fg);
+    }
+    .task-file .muted { color: var(--muted); }
+    .task-file .mono {
+      font-family: var(--font-mono);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .task-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-end;
+      flex-shrink: 0;
+      max-width: 220px;
+    }
+    .task-actions .btn {
+      height: 32px;
+      padding: 0 12px;
+      font-size: 0.82rem;
+    }
+    .empty-hint {
+      margin: 36px 0 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .sub-list {
+      list-style: none;
+      margin: 14px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: color-mix(in oklab, var(--bg-deep) 25%, var(--surface));
+    }
+    .sub-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      gap: 8px;
+      background: transparent;
+    }
+    .sub-item:last-child { border-bottom: 0; }
+    .sub-item label {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      cursor: pointer;
+    }
+    .sub-item input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: var(--accent);
+    }
+    .sub-item strong { font-weight: 600; }
+    .sub-item .muted { color: var(--muted); font-size: 0.84rem; }
+    .sub-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding-left: 26px;
+    }
+    .sub-compose {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .sub-compose .text-input { flex: 1; min-width: 220px; }
+
+    /* 设置复用 .work-layout / .work-nav / .work-body，勿写 display:contents */
+    .settings-body { min-width: 0; }
+    .settings-pane { display: none; }
+    .settings-pane.active { display: block; }
+    .settings-section { margin: 0 0 22px; padding: 0; border: 0; background: transparent; }
+    .settings-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .settings-section-title {
+      margin: 0 0 10px;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .settings-section-head .settings-section-title {
+      margin: 0;
+      font-size: 0.95rem;
+      letter-spacing: -0.02em;
+      text-transform: none;
+      color: var(--fg);
+    }
+    .settings-steps {
+      margin: 0 0 14px;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 62ch;
+    }
+    .pref-list {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: color-mix(in oklab, var(--bg-deep) 28%, var(--surface));
+    }
+    .pref-row,
+    .setting-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px 18px;
+      align-items: center;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      min-height: 56px;
+    }
+    .pref-row:last-child,
+    .setting-row:last-child { border-bottom: 0; }
+    .pref-row.stack {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .pref-row .s-title,
+    .setting-row .s-title { font-weight: 550; letter-spacing: -0.01em; }
+    .pref-row .s-desc,
+    .setting-row .s-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 2px;
+      max-width: 52ch;
+      line-height: 1.45;
+    }
+    .pref-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 16px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--wash);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .status-badge.ok {
+      color: var(--ok);
+      border-color: color-mix(in oklab, var(--ok) 35%, var(--border));
+      background: color-mix(in oklab, var(--ok) 12%, transparent);
+    }
+    .status-badge.warn {
+      color: var(--accent-strong);
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .status-badge.bad {
+      color: var(--danger);
+      border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
+      background: color-mix(in oklab, var(--danger) 12%, transparent);
+    }
+    .path-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      width: min(100%, 460px);
+      justify-self: end;
+    }
+    .path-row .text-input {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+    }
+    .seg-control {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      gap: 2px;
+    }
+    .seg-control button {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-weight: 550;
+      font-size: 0.82rem;
+      letter-spacing: 0.01em;
+    }
+    .seg-control button:hover { color: var(--fg); }
+    .seg-control button.active {
+      background: var(--surface);
+      color: var(--fg);
+      box-shadow: 0 1px 2px oklch(0% 0 0 / 0.08);
+      font-weight: 600;
+    }
+    .num-field {
+      width: 88px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
+    }
+    .tg-flow {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .tg-step {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: color-mix(in oklab, var(--bg-deep) 30%, var(--surface));
+    }
+    .tg-step-n {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+    }
+    .tg-step h4 {
+      font-size: 0.9rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      margin: 2px 0 4px;
+    }
+    .tg-step p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.45;
+      margin: 0 0 10px;
+    }
+    .tg-step .tg-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 640px) {
+      .tg-step .tg-fields { grid-template-columns: 1fr; }
+    }
+    .tg-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .local-chip {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--wash);
+      border: 1px solid var(--border);
+    }
+    .overflow-wrap { position: relative; }
+    .overflow-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      min-width: 168px;
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      z-index: 50;
+      display: none;
+    }
+    .overflow-menu.open { display: block; }
+    .overflow-menu button {
+      width: 100%;
+      text-align: left;
+      padding: 9px 10px;
+      border-radius: 8px;
+      color: var(--fg);
+      font-weight: 500;
+    }
+    .overflow-menu button:hover { background: var(--hover-fill); }
+    .overflow-menu button.danger { color: var(--danger); }
+    .browse-drop {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      display: none;
+      place-items: center;
+      background: color-mix(in oklab, var(--bg-deep) 72%, transparent);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+    .browse-drop.show { display: grid; }
+    .browse-drop-card {
+      padding: 20px 28px;
+      border-radius: 14px;
+      border: 1px dashed color-mix(in oklab, var(--accent) 55%, var(--border));
+      background: color-mix(in oklab, var(--surface) 92%, transparent);
+      color: var(--fg);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .switch {
+      width: 44px;
+      height: 26px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--muted) 22%, transparent);
+      border: 1px solid var(--border);
+      position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .switch[aria-checked="true"] { background: var(--accent); border-color: transparent; }
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.15s;
+      box-shadow: 0 1px 3px oklch(0% 0 0 / 0.25);
+    }
+    .switch[aria-checked="true"]::after { transform: translateX(18px); }
+
+    .task-list:empty { display: none; }
+
+    html[data-theme="light"] .header {
+      background: color-mix(in oklab, var(--surface) 86%, transparent);
+      border-bottom-color: var(--border);
+    }
+    html[data-theme="light"] .search {
+      background: var(--input-bg);
+      border-color: var(--border);
+    }
+    html[data-theme="light"] .search:focus-within {
+      background: var(--surface);
+      border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
+    }
+    html[data-theme="light"] .rail {
+      background: color-mix(in oklab, var(--bg) 70%, transparent);
+      border-right-color: var(--border);
+    }
+    html[data-theme="light"] .icon-btn:hover {
+      background: var(--hover-fill);
+    }
+    html[data-theme="light"] .dock {
+      background: var(--surface);
+      border-color: var(--border);
+      box-shadow: var(--shadow-soft);
+    }
+
+    /* —— 模态 / 菜单 —— */
+    .modal-root {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: none;
+      place-items: center;
+      background: oklch(0% 0 0 / 0.55);
+      backdrop-filter: blur(4px);
+      padding: 24px;
+    }
+    .modal-root.open { display: grid; }
+    .modal {
+      width: min(400px, 100%);
+      background: var(--surface);
+      border: 1px solid oklch(100% 0 0 / 0.08);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow-soft);
+    }
+    .modal h3 {
+      font-size: 1.05rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      margin-bottom: 12px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .menu-pop {
+      position: fixed;
+      z-index: 70;
+      min-width: 160px;
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid oklch(100% 0 0 / 0.1);
+      background: oklch(20% 0.014 55 / 0.96);
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-soft);
+      display: none;
+    }
+    .menu-pop.open { display: block; }
+    .menu-pop button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--fg);
+    }
+    .menu-pop button:hover { background: oklch(100% 0 0 / 0.06); }
+    .menu-pop button.danger { color: var(--danger); }
+
+    .toast-host {
+      position: fixed;
+      top: 80px;
+      right: 22px;
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: var(--surface-2);
+      border: 1px solid oklch(100% 0 0 / 0.1);
+      color: var(--fg);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      box-shadow: var(--shadow-soft);
+      animation: toast-in 0.25s ease;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* —— 套图详情 —— */
+    #view-gallery {
+      position: relative;
+      background: var(--bg);
+    }
+    #view-gallery::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 220px;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 70% 100% at 12% 0%, var(--app-grad-a), transparent 65%),
+        linear-gradient(180deg, color-mix(in oklab, var(--surface) 55%, transparent), transparent);
+      opacity: 0.9;
+    }
+    .gallery-hero {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px 22px 0;
+    }
+    .gallery-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 12px 0 10px;
+      border-radius: 999px;
+      color: var(--fg);
+      font-weight: 550;
+      letter-spacing: 0.01em;
+      border: 1px solid var(--hairline);
+      background: color-mix(in oklab, var(--surface) 80%, transparent);
+      backdrop-filter: blur(10px);
+      flex-shrink: 0;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn-back:hover {
+      background: var(--hover-fill);
+      border-color: var(--border);
+    }
+    .btn-back svg { width: 16px; height: 16px; color: var(--muted); }
+    .gallery-nav-hint {
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .gallery-hero-card {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--hairline);
+      background: color-mix(in oklab, var(--surface) 88%, transparent);
+      backdrop-filter: blur(14px) saturate(1.1);
+      box-shadow: var(--shadow-soft);
+    }
+    .gallery-cover {
+      position: relative;
+      width: 112px;
+      height: 112px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--hairline);
+      background: var(--surface-2);
+      flex-shrink: 0;
+      box-shadow: 0 10px 28px oklch(0% 0 0 / 0.22);
+    }
+    .gallery-cover .art { position: absolute; inset: 0; }
+    .gallery-cover-badge {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      z-index: 1;
+      font: 10px/1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 4px 6px;
+      border-radius: 6px;
+      color: var(--accent-ink);
+      background: color-mix(in oklab, var(--accent) 92%, black 8%);
+    }
+    .gallery-titles { min-width: 0; }
+    .gallery-titles h2 {
+      font-family: var(--font-display);
+      font-size: clamp(1.2rem, 1.6vw, 1.55rem);
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gallery-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .g-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      border: 1px solid var(--hairline);
+      background: var(--wash);
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+      max-width: 100%;
+    }
+    .g-chip strong {
+      color: var(--fg);
+      font-weight: 550;
+    }
+    .g-chip.accent {
+      color: var(--accent-ink);
+      background: color-mix(in oklab, var(--accent) 88%, white 12%);
+      border-color: transparent;
+    }
+    .g-chip.ok {
+      color: var(--ok);
+      background: color-mix(in oklab, var(--ok) 14%, transparent);
+      border-color: color-mix(in oklab, var(--ok) 28%, transparent);
+    }
+    .gallery-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .gallery-head-actions .btn {
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 10px;
+    }
+    .btn-icon-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .btn-icon-label svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+    .btn-fav.is-on {
+      color: var(--accent);
+      border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .gallery-toolbar {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 14px 22px 0;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--hairline);
+      background: color-mix(in oklab, var(--surface) 70%, transparent);
+    }
+    .gallery-toolbar-left,
+    .gallery-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .gallery-toolbar .meta {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .density-group {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 10px;
+      border: 1px solid var(--hairline);
+      background: var(--wash);
+    }
+    .density-group button {
+      width: 32px;
+      height: 28px;
+      border-radius: 8px;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      transition: background 0.12s, color 0.12s;
+    }
+    .density-group button:hover { color: var(--fg); background: var(--hover-fill); }
+    .density-group button.active {
+      color: var(--fg);
+      background: var(--surface);
+      box-shadow: 0 1px 3px oklch(0% 0 0 / 0.12);
+    }
+    .density-group button svg { width: 15px; height: 15px; }
+    .btn-select.is-on {
+      border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
+    .gallery-select-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .gallery-select-bar.show { display: inline-flex; }
+    .thumb-scroll {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 14px 22px 110px;
+    }
+    .thumb-scroll::-webkit-scrollbar { width: 10px; }
+    .thumb-scroll::-webkit-scrollbar-thumb {
+      background: color-mix(in oklab, var(--muted) 35%, transparent);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .thumb-grid[data-density="compact"] {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .thumb-grid[data-density="comfortable"] {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+    @media (max-width: 1280px) {
+      .thumb-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .thumb-grid[data-density="compact"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .thumb-grid[data-density="comfortable"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .gallery-hero-card {
+        grid-template-columns: 88px minmax(0, 1fr);
+      }
+      .gallery-cover { width: 88px; height: 88px; border-radius: 12px; }
+      .gallery-head-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+      }
+      .thumb-grid,
+      .thumb-grid[data-density="comfortable"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .thumb-grid[data-density="compact"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    .thumb-wrap {
+      position: relative;
+      min-width: 0;
+    }
+    .thumb-wrap.selected .thumb-frame {
+      border-color: color-mix(in oklab, var(--accent) 70%, var(--border));
+      box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 35%, transparent);
+    }
+    .thumb-check {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 3;
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      border: 1px solid oklch(100% 0 0 / 0.28);
+      background: oklch(0% 0 0 / 0.42);
+      backdrop-filter: blur(6px);
+      display: grid;
+      place-items: center;
+    }
+    .thumb-check input {
+      width: 12px;
+      height: 12px;
+      accent-color: var(--accent);
+      margin: 0;
+    }
+    .thumb-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      text-align: left;
+      border-radius: var(--radius-sm);
+    }
+    .thumb-item:focus-visible { box-shadow: var(--focus); border-radius: var(--radius); }
+    .thumb-frame {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      transition: transform 0.18s ease, border-color 0.15s, box-shadow 0.18s;
+    }
+    .thumb-item:hover .thumb-frame {
+      transform: translateY(-2px);
+      border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+      box-shadow: 0 14px 28px oklch(0% 0 0 / 0.18);
+    }
+    .thumb-frame .art {
+      position: absolute;
+      inset: 0;
+      transition: transform 0.35s ease;
+    }
+    .thumb-item:hover .thumb-frame .art { transform: scale(1.04); }
+    .thumb-frame .hover-veil {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, transparent 40%, oklch(0% 0 0 / 0.45));
+      opacity: 0;
+      transition: opacity 0.15s;
+      color: oklch(98% 0.01 75);
+      font-size: 0.78rem;
+      font-weight: 550;
+      letter-spacing: 0.04em;
+    }
+    .thumb-item:hover .hover-veil { opacity: 1; }
+    .hover-veil span {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid oklch(100% 0 0 / 0.18);
+      background: oklch(0% 0 0 / 0.35);
+      backdrop-filter: blur(8px);
+    }
+    .thumb-frame .cover-tag {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 2;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 6px;
+      color: var(--accent-ink);
+      background: color-mix(in oklab, var(--accent) 92%, black 8%);
+    }
+    .thumb-frame .idx {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      z-index: 2;
+      font: 11px/1 var(--font-mono);
+      letter-spacing: 0.04em;
+      color: oklch(96% 0.01 75);
+      background: oklch(0% 0 0 / 0.45);
+      backdrop-filter: blur(6px);
+      padding: 4px 6px;
+      border-radius: 6px;
+    }
+    .thumb-grid[data-density="compact"] .thumb-cap,
+    .thumb-grid[data-density="compact"] .hover-veil { display: none; }
+    .thumb-grid[data-density="compact"] .thumb-frame { aspect-ratio: 1 / 1; border-radius: 10px; }
+    .thumb-cap {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 2px;
+      min-width: 0;
+    }
+    .thumb-cap .name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.8rem;
+      color: var(--fg);
+      font-weight: 510;
+    }
+    .thumb-cap .res {
+      flex-shrink: 0;
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+    .thumb-ctx {
+      position: fixed;
+      z-index: 90;
+      min-width: 160px;
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--hairline);
+      background: var(--elevated);
+      box-shadow: var(--shadow-soft);
+      display: none;
+    }
+    .thumb-ctx.open { display: block; }
+    .thumb-ctx button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      color: var(--fg);
+    }
+    .thumb-ctx button:hover { background: var(--hover-fill); }
+    .thumb-ctx button.danger { color: var(--danger); }
+    html[data-theme="light"] #view-gallery::before {
+      opacity: 0.7;
+    }
+    html[data-theme="light"] .gallery-hero-card {
+      box-shadow: 0 10px 28px oklch(30% 0.02 55 / 0.08);
+    }
+    html[data-theme="light"] .thumb-check {
+      border-color: oklch(0% 0 0 / 0.12);
+      background: oklch(100% 0 0 / 0.75);
+    }
+
+    /* —— 灯箱 · 单张浏览 —— */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: none;
+      background: oklch(8% 0.01 55 / 0.92);
+      backdrop-filter: blur(10px);
+      flex-direction: column;
+    }
+    .lightbox.open { display: flex; }
+    .lb-top {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid oklch(100% 0 0 / 0.06);
+    }
+    .lb-top .lb-title {
+      min-width: 0;
+      font-weight: 550;
+      letter-spacing: -0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lb-top .lb-meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
+      letter-spacing: 0.04em;
+    }
+    .lb-stage {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 56px 1fr 56px;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 12px 24px;
+    }
+    .lb-nav {
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: var(--fg);
+      background: oklch(100% 0 0 / 0.06);
+      border: 1px solid oklch(100% 0 0 / 0.08);
+      transition: background 0.12s;
+    }
+    .lb-nav:hover { background: oklch(100% 0 0 / 0.1); }
+    .lb-nav:disabled { opacity: 0.3; cursor: default; }
+    .lb-nav svg { width: 22px; height: 22px; }
+    .lb-frame {
+      height: min(72vh, 820px);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid oklch(100% 0 0 / 0.08);
+      box-shadow: var(--shadow-soft);
+      position: relative;
+    }
+    .lb-frame .art { position: absolute; inset: 0; }
+    .lb-film {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 18px 16px;
+      scrollbar-width: thin;
+    }
+    .lb-film::-webkit-scrollbar { height: 6px; }
+    .lb-film::-webkit-scrollbar-thumb {
+      background: oklch(100% 0 0 / 0.15);
+      border-radius: 999px;
+    }
+    .lb-chip {
+      flex: 0 0 auto;
+      width: 64px;
+      height: 48px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      position: relative;
+      opacity: 0.65;
+      transition: opacity 0.12s, border-color 0.12s;
+    }
+    .lb-chip .art { position: absolute; inset: 0; }
+    .lb-chip.active {
+      opacity: 1;
+      border-color: var(--accent);
+    }
+    .lb-chip:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="header" data-od-id="header">
+      <button type="button" class="brand" id="btn-home" aria-label="WallpaperRunner 首页">
+        <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M8 22c2-6 4.5-10 7-12 1.5 4 3 6.5 5 8 1.5-3 3-5 5-6-1 6-2.5 10-4 14H8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <circle cx="22.5" cy="9.5" r="1.6" fill="currentColor"/>
+          <path d="M6 25h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.55"/>
+        </svg>
+        <span class="brand-name">WallpaperRunner</span>
+      </button>
+
+      <label class="search" data-od-id="search">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M16 16.5L20 20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <input id="search-input" type="search" placeholder="搜索壁纸、作者或关键词" autocomplete="off" data-focus="library-search" />
+        <kbd>⌘K</kbd>
+      </label>
+
+      <div class="header-actions">
+        <button type="button" class="icon-btn" id="btn-acquire" title="获取" aria-label="获取壁纸" data-mode="acquire">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 4v11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M7.5 11.5L12 16l4.5-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 19.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="dot" id="acquire-dot" hidden></span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-settings" title="设置" aria-label="设置" data-mode="settings">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="rail" data-od-id="rail" aria-label="收藏夹与导航">
+        <div class="rail-section">
+          <div class="rail-label">浏览</div>
+          <button type="button" class="rail-item active" data-sel='{"kind":"all"}' id="sel-all">
+            <span class="ico" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <span class="name">全部</span>
+            <span class="count" id="count-all">0</span>
+          </button>
+          <button type="button" class="rail-item" data-sel='{"kind":"favorite"}'>
+            <span class="ico" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 19s-6.5-4.1-8.5-7.8C1.7 8.1 3.5 5 6.8 5c1.9 0 3.2 1.1 3.7 1.7.5-.6 1.8-1.7 3.7-1.7 3.3 0 5.1 3.1 3.3 6.2C18.5 14.9 12 19 12 19z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="name">收藏</span>
+            <span class="count" id="count-fav">0</span>
+          </button>
+        </div>
+
+        <div class="rail-section" id="authors-section">
+          <div class="rail-label">作者</div>
+          <!-- filled by JS -->
+        </div>
+
+        <div class="rail-section" id="playlists-section">
+          <div class="rail-label">播放列表</div>
+          <!-- filled by JS -->
+        </div>
+
+        <div class="rail-spacer"></div>
+        <button type="button" class="btn-new-list" id="btn-new-playlist">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          新建播放列表
+        </button>
+      </aside>
+
+      <main class="main">
+        <!-- 浏览（本地库） -->
+        <section class="view active" id="view-browse" data-od-id="browse" aria-label="本地套图库">
+          <div class="toolbar">
+            <div>
+              <h2 id="browse-title">全部套图</h2>
+              <div class="meta" id="browse-meta">—</div>
+            </div>
+            <div class="sort-group" role="group" aria-label="排序">
+              <button type="button" data-sort="recent" aria-pressed="true">最近</button>
+              <button type="button" data-sort="title" aria-pressed="false">标题</button>
+              <button type="button" data-sort="author" aria-pressed="false">作者</button>
+            </div>
+          </div>
+          <div class="grid-scroll" id="browse-scroll">
+            <div class="grid" id="wall-grid"></div>
+            <div class="empty" id="browse-empty" hidden>
+              <h3>本地库还没有套图</h3>
+              <p>拖入本地文件夹导入，或到「获取」页从网络源下载。</p>
+              <div class="row" style="justify-content:center;margin-top:14px">
+                <button type="button" class="btn btn-primary" id="btn-go-acquire">去获取</button>
+              </div>
+            </div>
+            <div class="browse-drop" id="browse-drop" aria-hidden="true">
+              <div class="browse-drop-card">松开以导入本地文件夹（一层一套图）</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 套图详情：本地已入库的一组图 -->
+        <section class="view" id="view-gallery" data-od-id="gallery" aria-label="套图详情">
+          <div class="gallery-hero">
+            <div class="gallery-nav">
+              <button type="button" class="btn-back" id="btn-gallery-back" aria-label="返回套图库">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.5 6.5L9 12l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                返回库
+              </button>
+              <span class="gallery-nav-hint" id="gallery-nav-hint">本地套图</span>
+            </div>
+            <div class="gallery-hero-card">
+              <div class="gallery-cover" id="gallery-cover" aria-hidden="true">
+                <div class="art art-a"></div>
+                <span class="gallery-cover-badge">封面</span>
+              </div>
+              <div class="gallery-titles">
+                <h2 id="gallery-title">—</h2>
+                <div class="gallery-chip-row" id="gallery-chips"></div>
+              </div>
+              <div class="gallery-head-actions">
+                <button type="button" class="btn btn-ghost btn-icon-label btn-fav" id="gallery-fav-btn">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 18.2l-5.4 3 1.1-6.1L3.4 10.9l6.2-.9L12 4.5l2.4 5.5 6.2.9-4.3 4.2 1.1 6.1L12 18.2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                  <span id="gallery-fav-label">收藏</span>
+                </button>
+                <button type="button" class="btn btn-ghost btn-icon-label" id="gallery-folder-btn">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 015.5 7H9l1.2 1.6H18.5A1.5 1.5 0 0120 10.1v7.4a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5v-9z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                  打开文件夹
+                </button>
+                <div class="overflow-wrap">
+                  <button type="button" class="btn btn-ghost" id="gallery-more-btn" aria-haspopup="menu" aria-expanded="false">更多</button>
+                  <div class="overflow-menu" id="gallery-overflow" role="menu">
+                    <button type="button" role="menuitem" data-g="rename">重命名</button>
+                    <button type="button" role="menuitem" data-g="redownload">重新下载（网络）</button>
+                    <button type="button" role="menuitem" class="danger" data-g="delete">删除套图</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gallery-toolbar">
+            <div class="gallery-toolbar-left">
+              <button type="button" class="btn btn-ghost btn-select" id="gallery-select-btn">多选</button>
+              <div class="gallery-select-bar" id="gallery-select-bar">
+                <button type="button" class="btn btn-ghost" id="gallery-select-all">全选</button>
+                <button type="button" class="btn btn-ghost" id="gallery-select-clear">清除</button>
+                <button type="button" class="btn danger" id="gallery-select-delete">删除所选</button>
+              </div>
+              <span class="meta" id="gallery-tools-meta">点击缩略图预览单张</span>
+            </div>
+            <div class="gallery-toolbar-right">
+              <div class="density-group" role="group" aria-label="缩略图密度">
+                <button type="button" data-density="compact" title="紧凑" aria-label="紧凑">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 2h4v4H2V2zm6 0h4v4H8V2zM2 8h4v4H2V8zm6 0h4v4H8V8z" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+                <button type="button" data-density="standard" class="active" title="标准" aria-label="标准">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 2h5v5H2V2zm7 0h5v5H9V2zM2 9h5v5H2V9zm7 0h5v5H9V9z" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+                <button type="button" data-density="comfortable" title="宽松" aria-label="宽松">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 2h12v12H2V2z" stroke="currentColor" stroke-width="1.2"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="thumb-scroll">
+            <div class="thumb-grid" id="thumb-grid" data-density="standard"></div>
+            <div class="empty" id="gallery-empty" hidden>
+              <h3>此套图没有内容</h3>
+              <p>可在「更多 → 重新下载」从原网络源补全，或删除后重新导入本地。</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="thumb-ctx" id="thumb-ctx" role="menu">
+          <button type="button" role="menuitem" data-ctx="cover">设为封面</button>
+          <button type="button" role="menuitem" data-ctx="preview">预览</button>
+          <button type="button" role="menuitem" class="danger" data-ctx="delete">删除这张</button>
+        </div>
+
+        <!-- 获取：网络源下载（非本地库职责） -->
+        <section class="view" id="view-acquire" data-od-id="acquire" aria-label="获取">
+          <div class="panel wide">
+            <div class="work-shell">
+              <div class="page-head">
+                <div>
+                  <h2>获取</h2>
+                  <p class="lead">从网络源下载套图入本地库。浏览页只看已入库内容；入队、队列与订阅都在这里。</p>
+                </div>
+                <div class="page-stats" id="acq-stats" aria-live="polite"></div>
+              </div>
+
+              <div class="work-layout">
+                <nav class="work-nav" aria-label="获取分段">
+                  <div class="work-nav-label">流程</div>
+                  <button type="button" class="work-nav-btn active" role="tab" aria-selected="true" data-acq-seg="enqueue">
+                    <span>入队</span>
+                  </button>
+                  <button type="button" class="work-nav-btn" role="tab" aria-selected="false" data-acq-seg="queue" id="tab-queue">
+                    <span>队列</span>
+                    <span class="nav-count" id="nav-queue-count" hidden>0</span>
+                  </button>
+                  <button type="button" class="work-nav-btn" role="tab" aria-selected="false" data-acq-seg="subs" id="tab-subs">
+                    <span>订阅</span>
+                    <span class="nav-count" id="nav-subs-count" hidden>0</span>
+                  </button>
+                </nav>
+
+                <div class="work-body">
+                  <div class="acquire-pane work-pane active" id="pane-enqueue" data-acq-pane="enqueue">
+                    <h3 class="pane-title">粘贴链接开始下载</h3>
+                    <p class="pane-sub">先选择来源，再粘贴或拖入 URL。xChina 直接入队；Telegram / Telegraph 解析后勾选资源再下载。</p>
+
+                    <div class="composer">
+                      <div class="source-cards" role="tablist" aria-label="下载来源">
+                        <button type="button" class="source-card active" role="tab" aria-selected="true" data-source="xchina">
+                          <span class="sc-name">xChina</span>
+                          <span class="sc-desc">图集页直链 · 支持拖入多条</span>
+                        </button>
+                        <button type="button" class="source-card" role="tab" aria-selected="false" data-source="telegram">
+                          <span class="sc-name">Telegram</span>
+                          <span class="sc-desc">频道帖 · 可合并多链接</span>
+                        </button>
+                        <button type="button" class="source-card" role="tab" aria-selected="false" data-source="telegraph">
+                          <span class="sc-name">Telegraph</span>
+                          <span class="sc-desc">文章页 · 每次一条链接</span>
+                        </button>
+                      </div>
+
+                      <div class="url-composer" id="url-drop">
+                        <textarea id="url-input" data-focus="download-urls" placeholder="https://xchina.co/photo/id-xxxxxxxx.html
+也可直接拖入链接" spellcheck="false"></textarea>
+                        <div class="url-composer-meta">
+                          <span id="url-hint">xChina · 支持一次多条；完成后自动入库</span>
+                          <span>⌘/Ctrl + V</span>
+                        </div>
+                      </div>
+
+                      <div class="composer-actions">
+                        <button type="button" class="btn btn-primary" id="btn-enqueue">开始下载</button>
+                        <button type="button" class="btn btn-ghost" id="btn-clear-urls">清空</button>
+                        <span class="spacer"></span>
+                        <button type="button" class="btn btn-ghost" id="btn-goto-queue">查看队列</button>
+                      </div>
+
+                      <div class="quick-grid" aria-label="职责说明">
+                        <div class="quick-card">
+                          <div class="qk-title">网络源</div>
+                          <div class="qk-body">只在此页入队；任务进队列，完成写入本地库。</div>
+                        </div>
+                        <div class="quick-card">
+                          <div class="qk-title">本地导入</div>
+                          <div class="qk-body">回主页空白区拖入文件夹（一层子目录 = 一套图）。</div>
+                        </div>
+                        <div class="quick-card">
+                          <div class="qk-title">订阅</div>
+                          <div class="qk-body">收藏 URL，检查到新图时自动加入下载列表。</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="acquire-pane work-pane" id="pane-queue" data-acq-pane="queue">
+                    <h3 class="pane-title">下载队列</h3>
+                    <p class="pane-sub">进度、速度、文件明细、暂停 / 重排 / 重试，对齐真实下载列表。</p>
+                    <div class="queue-toolbar">
+                      <p class="lead-sm" id="queue-summary">下载列表</p>
+                      <div class="row">
+                        <button type="button" class="btn btn-ghost" id="btn-retry-failed" hidden>重试全部失败</button>
+                        <button type="button" class="btn btn-ghost" id="btn-clear-done" hidden>清除已完成</button>
+                      </div>
+                    </div>
+                    <ul class="task-list" id="queue-list" aria-live="polite" aria-label="下载列表"></ul>
+                    <p class="empty-hint" id="queue-empty" hidden>队列为空。切换到「入队」粘贴或拖入网络链接开始下载。</p>
+                  </div>
+
+                  <div class="acquire-pane work-pane" id="pane-subs" data-acq-pane="subs">
+                    <h3 class="pane-title">订阅更新</h3>
+                    <p class="pane-sub">收藏套图 URL。定期或手动检查时，若有新图将自动入队；已下内容仍在本地库浏览。</p>
+                    <div class="sub-compose">
+                      <input type="text" class="text-input" id="sub-url" placeholder="https://xchina.co/photo/id-….html" />
+                      <button type="button" class="btn btn-ghost" id="btn-add-sub">添加</button>
+                      <button type="button" class="btn btn-primary" id="btn-check-subs">立即检查</button>
+                    </div>
+                    <ul class="sub-list" id="sub-list"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="view" id="view-settings" data-od-id="settings" aria-label="设置">
+          <div class="panel wide">
+            <div class="work-shell">
+              <div class="page-head">
+                <div>
+                  <h2>设置</h2>
+                  <p class="lead">下载路径、外观、代理与 Wallpaper Engine 工程。演示仅保存在当前会话。</p>
+                </div>
+              </div>
+
+              <div class="work-layout settings-layout">
+                <nav class="work-nav settings-nav" aria-label="设置分组">
+                  <div class="work-nav-label">分组</div>
+                  <button type="button" class="work-nav-btn settings-nav-btn active" data-set-group="general">通用</button>
+                  <button type="button" class="work-nav-btn settings-nav-btn" data-set-group="network">网络</button>
+                  <button type="button" class="work-nav-btn settings-nav-btn" data-set-group="telegram">Telegram</button>
+                  <button type="button" class="work-nav-btn settings-nav-btn" data-set-group="wallpaper">壁纸</button>
+                </nav>
+
+                <div class="work-body settings-body">
+                  <div class="settings-pane active" data-set-pane="general">
+                    <section class="settings-section">
+                      <h3 class="settings-section-title">库与下载</h3>
+                      <div class="pref-list">
+                        <div class="pref-row stack">
+                          <div>
+                            <div class="s-title">下载根目录</div>
+                            <div class="s-desc">网络下载与本地导入都落在此目录下。</div>
+                          </div>
+                          <div class="path-row" style="justify-self:stretch;width:100%;max-width:none">
+                            <input class="text-input" id="download-path-input" type="text" readonly value="~/Pictures/WallpaperRunner" />
+                            <button type="button" class="btn btn-ghost" id="btn-path">选择…</button>
+                          </div>
+                        </div>
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">套内图片并发</div>
+                            <div class="s-desc">1–8，默认 2。过高可能导致代理 / CDN 丢文件。</div>
+                          </div>
+                          <input class="text-input num-field" id="set-concurrency" type="number" min="1" max="8" value="2" />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="settings-section">
+                      <h3 class="settings-section-title">外观</h3>
+                      <div class="pref-list">
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">主题</div>
+                            <div class="s-desc">界面明暗。跟随系统将随 OS 切换。</div>
+                          </div>
+                          <div class="seg-control" id="theme-seg" role="radiogroup" aria-label="主题">
+                            <button type="button" data-theme-val="system">系统</button>
+                            <button type="button" data-theme-val="light">亮色</button>
+                            <button type="button" class="active" data-theme-val="dark">暗色</button>
+                          </div>
+                          <select class="text-input" id="set-theme" hidden aria-hidden="true">
+                            <option value="system">跟随系统</option>
+                            <option value="light">亮色</option>
+                            <option value="dark" selected>暗色</option>
+                          </select>
+                        </div>
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">下载时通知</div>
+                            <div class="s-desc">任务完成或失败时弹出提示</div>
+                          </div>
+                          <button type="button" class="switch" id="sw-notify" role="switch" aria-checked="true" aria-label="下载时通知"></button>
+                        </div>
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">悬停预览</div>
+                            <div class="s-desc">库卡悬停时展示「打开套图」覆盖</div>
+                          </div>
+                          <button type="button" class="switch" id="sw-preview" role="switch" aria-checked="true" aria-label="悬停预览"></button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="settings-section">
+                      <h3 class="settings-section-title">维护</h3>
+                      <div class="pref-list">
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">本地导入约定</div>
+                            <div class="s-desc">主页拖入文件夹即可；一层子目录 = 一套图。不在此页执行网络下载。</div>
+                          </div>
+                          <span class="local-chip">库页</span>
+                        </div>
+                        <div class="pref-actions">
+                          <button type="button" class="btn btn-ghost" id="btn-rebuild-index">从磁盘重建索引</button>
+                          <button type="button" class="btn btn-ghost" id="btn-replay-onboarding">重新打开引导</button>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div class="settings-pane" data-set-pane="network">
+                    <section class="settings-section">
+                      <h3 class="settings-section-title">网络</h3>
+                      <div class="pref-list">
+                        <div class="pref-row stack">
+                          <div>
+                            <div class="s-title">HTTP 代理</div>
+                            <div class="s-desc">例如 http://127.0.0.1:7890；留空则直连。Telegram 沿用此设置。</div>
+                          </div>
+                          <input class="text-input" id="set-proxy" type="text" placeholder="http://127.0.0.1:7890" value="" />
+                        </div>
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">订阅自动检查间隔</div>
+                            <div class="s-desc">小时。0 = 仅手动「立即检查」。</div>
+                          </div>
+                          <input class="text-input num-field" id="set-sub-hours" type="number" min="0" max="168" value="6" />
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div class="settings-pane" data-set-pane="telegram">
+                    <section class="settings-section">
+                      <div class="settings-section-head">
+                        <h3 class="settings-section-title">Telegram</h3>
+                        <span class="status-badge" id="tg-badge">未连接</span>
+                      </div>
+                      <p class="settings-steps">在 my.telegram.org 申请 api_id / api_hash。Session 保存在本机；代理沿用「网络」设置。</p>
+                      <div class="tg-flow">
+                        <div class="tg-step">
+                          <div class="tg-step-n">1</div>
+                          <div>
+                            <h4>凭据</h4>
+                            <p>填写 api_id 与 api_hash，失焦即保存。</p>
+                            <div class="tg-fields">
+                              <input class="text-input" id="tg-api-id" type="text" placeholder="api_id" />
+                              <input class="text-input" id="tg-api-hash" type="text" placeholder="api_hash" />
+                            </div>
+                          </div>
+                        </div>
+                        <div class="tg-step">
+                          <div class="tg-step-n">2</div>
+                          <div>
+                            <h4>手机号发码</h4>
+                            <p>含国际区号。可先「连接 session」，或「发送验证码」登录。</p>
+                            <input class="text-input" id="tg-phone" type="text" placeholder="+86…" style="max-width:280px" />
+                            <div class="tg-actions">
+                              <button type="button" class="btn btn-ghost" id="tg-connect">连接 session</button>
+                              <button type="button" class="btn btn-primary" id="tg-send-code">发送验证码</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="tg-step">
+                          <div class="tg-step-n">3</div>
+                          <div>
+                            <h4>验证码 / 2FA</h4>
+                            <p>收到验证码后提交；若开启两步验证再填密码。</p>
+                            <div class="tg-fields">
+                              <input class="text-input" id="tg-code" type="text" placeholder="验证码" />
+                              <input class="text-input" id="tg-password" type="password" placeholder="两步验证密码" />
+                            </div>
+                            <div class="tg-actions">
+                              <button type="button" class="btn btn-ghost" id="tg-submit-code">提交验证码</button>
+                              <button type="button" class="btn btn-ghost" id="tg-submit-2fa">提交 2FA</button>
+                              <button type="button" class="btn btn-ghost" id="tg-logout">登出</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div class="settings-pane" data-set-pane="wallpaper">
+                    <section class="settings-section">
+                      <h3 class="settings-section-title">Wallpaper Engine</h3>
+                      <p class="settings-steps" id="we-startup-label">开机自启：未开启。「立即同步」会写入工程目录，并覆盖 WE 已导入副本。首次只需导入一次 index.html。</p>
+                      <div class="pref-list">
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">媒体端口</div>
+                            <div class="s-desc">本地媒体服务端口（1024–65535）</div>
+                          </div>
+                          <input class="text-input num-field" id="set-we-port" type="number" min="1024" max="65535" value="19283" />
+                        </div>
+                        <div class="pref-row stack">
+                          <div>
+                            <div class="s-title">WE 工程目录</div>
+                            <div class="s-desc">写入的 Wallpaper Engine 工程根路径</div>
+                          </div>
+                          <div class="path-row" style="justify-self:stretch;width:100%;max-width:none">
+                            <input class="text-input" id="set-we-dir" type="text" readonly value="~/Documents/WallpaperRunner/we-project" />
+                            <button type="button" class="btn btn-ghost" id="btn-we-dir">选择…</button>
+                          </div>
+                        </div>
+                        <div class="pref-row">
+                          <div>
+                            <div class="s-title">图库变更时自动同步</div>
+                            <div class="s-desc">本地库增删后自动写入 WE 工程</div>
+                          </div>
+                          <button type="button" class="switch" id="sw-we-auto" role="switch" aria-checked="true" aria-label="自动同步"></button>
+                        </div>
+                        <div class="pref-actions">
+                          <button type="button" class="btn btn-primary" id="btn-we-sync">立即同步</button>
+                          <button type="button" class="btn btn-ghost" id="btn-we-open">打开工程目录</button>
+                          <button type="button" class="btn btn-ghost" id="btn-we-startup-on">安装开机自启</button>
+                          <button type="button" class="btn btn-ghost" id="btn-we-startup-off">卸载开机自启</button>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 下载浮层：对齐真实 DownloadDock -->
+        <aside class="dock" id="dock" data-od-id="download-dock" aria-live="polite">
+          <button type="button" class="dock-toggle" id="dock-toggle" aria-expanded="false">
+            <span id="dock-summary">下载中 0</span>
+            <span class="dock-chevron" id="dock-chevron" aria-hidden="true">▴</span>
+          </button>
+          <div class="dock-bar" aria-hidden="true"><i id="dock-fill"></i></div>
+          <div class="dock-body" id="dock-body">
+            <ul class="dock-list" id="dock-list"></ul>
+            <button type="button" class="btn" id="dock-open-page">打开下载页</button>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-root" id="modal-root" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <h3 id="modal-title">新建播放列表</h3>
+      <div class="field" style="margin-bottom:0">
+        <label for="playlist-name">名称</label>
+        <input type="text" id="playlist-name" placeholder="例如：赛博夜景" maxlength="40" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="modal-confirm">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu-pop" id="card-menu" role="menu"></div>
+  <div class="toast-host" id="toasts"></div>
+
+  <!-- 套图内灯箱 -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="图片预览">
+    <div class="lb-top">
+      <div class="lb-title" id="lb-title">—</div>
+      <div class="lb-meta" id="lb-meta">—</div>
+      <button type="button" class="ghost-ico" id="lb-close" title="关闭" aria-label="关闭预览">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="lb-stage">
+      <button type="button" class="lb-nav" id="lb-prev" aria-label="上一张">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M14.5 6.5L9 12l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="lb-frame"><div class="art" id="lb-art"></div></div>
+      <button type="button" class="lb-nav" id="lb-next" aria-label="下一张">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M9.5 6.5L15 12l-5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="lb-film" id="lb-film"></div>
+  </div>
+
+  <script>
+    (function () {
+      var ARTS = ["art-a", "art-b", "art-c", "art-d", "art-e", "art-f", "art-g", "art-h"];
+
+      /** 库中每一项是一套图（gallery），images 为组内多张 */
+      function makeImages(coverArt, count, seed) {
+        var out = [];
+        var i;
+        for (i = 0; i < count; i++) {
+          var art = (coverArt + i + (seed % 3)) % ARTS.length;
+          if (i === 0) art = coverArt;
+          out.push({
+            name: pad2(i + 1) + ".jpg",
+            art: art,
+            res: i % 3 === 0 ? "3840×2160" : i % 3 === 1 ? "5120×2880" : "2560×1440"
+          });
+        }
+        return out;
+      }
+
+      function pad2(n) {
+        return (n < 10 ? "0" : "") + n;
+      }
+
+      var SETS = [
+        { id: "g1", title: "星际远征", author: "Aenami", coverArt: 0, type: "动态", size: "122.4 MB", favorite: true, playlist: ["pl1"], recent: 8, source: "xchina", sourceUrl: "https://xchina.co/photo/id-ex01.html", images: makeImages(0, 12, 1) },
+        { id: "g2", title: "日落之境", author: "Artem Demura", coverArt: 1, type: "静态", size: "48.2 MB", favorite: false, playlist: ["pl2"], recent: 7, source: "local", sourceUrl: "file:///Pictures/set-g2", images: makeImages(1, 8, 2) },
+        { id: "g3", title: "天际漫步", author: "WLOP", coverArt: 2, type: "静态", size: "64.6 MB", favorite: true, playlist: [], recent: 6, source: "telegram", sourceUrl: "https://t.me/channel/103", images: makeImages(2, 15, 3) },
+        { id: "g4", title: "霓虹港湾", author: "Aenami", coverArt: 3, type: "动态", size: "86.1 MB", favorite: false, playlist: ["pl1"], recent: 5, source: "xchina", sourceUrl: "https://xchina.co/photo/id-ex04.html", images: makeImages(3, 9, 4) },
+        { id: "g5", title: "雾隐山脊", author: "Artem Demura", coverArt: 4, type: "静态", size: "41.0 MB", favorite: false, playlist: ["pl2"], recent: 4, source: "local", sourceUrl: "file:///Pictures/set-g5", images: makeImages(4, 6, 5) },
+        { id: "g6", title: "金色轨道", author: "WLOP", coverArt: 5, type: "静态", size: "72.8 MB", favorite: true, playlist: ["pl3"], recent: 3, source: "telegraph", sourceUrl: "https://telegra.ph/gold-01-01", images: makeImages(5, 11, 6) },
+        { id: "g7", title: "深空回廊", author: "Aenami", coverArt: 6, type: "动态", size: "98.3 MB", favorite: false, playlist: ["pl1"], recent: 2, source: "xchina", sourceUrl: "https://xchina.co/photo/id-ex07.html", images: makeImages(6, 14, 7) },
+        { id: "g8", title: "极光档案", author: "Nova Clay", coverArt: 7, type: "静态", size: "55.5 MB", favorite: false, playlist: ["pl3"], recent: 1, source: "local", sourceUrl: "file:///Pictures/set-g8", images: makeImages(7, 10, 8) }
+      ];
+
+      var AUTHORS = [
+        { name: "Aenami", initial: "Ae" },
+        { name: "Artem Demura", initial: "Ar" },
+        { name: "WLOP", initial: "Wl" },
+        { name: "Nova Clay", initial: "No" }
+      ];
+      var PLAYLISTS = [
+        { id: "pl1", name: "科幻宇宙" },
+        { id: "pl2", name: "自然风光" },
+        { id: "pl3", name: "高动态范围" }
+      ];
+
+      var SOURCE_PLACEHOLDERS = {
+        xchina: "https://xchina.co/photo/id-xxxxxxxx.html\n支持多行，每行一个地址",
+        telegram: "https://t.me/channel/123\n可粘贴多条，合并为一套图",
+        telegraph: "https://telegra.ph/Article-01-01"
+      };
+
+      var state = {
+        mode: "browse", // browse | gallery | acquire | settings
+        selection: { kind: "all" },
+        query: "",
+        sort: "recent",
+        notify: true,
+        hoverPreview: true,
+        settingsGroup: "general",
+        downloadPath: "~/Pictures/WallpaperRunner",
+        concurrency: 2,
+        theme: "dark",
+        proxyUrl: "",
+        subCheckHours: 6,
+        tgState: "idle",
+        wePort: 19283,
+        weDir: "~/Documents/WallpaperRunner/we-project",
+        weAutoSync: true,
+        weStartup: false,
+        downloadSource: "xchina",
+        acqSeg: "enqueue",
+        queue: [
+          {
+            id: "q-demo-1",
+            title: "星际远征",
+            url: "https://xchina.co/photo/id-ex01.html",
+            source: "xchina",
+            status: "downloading",
+            done: 5,
+            total: 12,
+            bytesReceived: 48700000,
+            bytesTotal: 122400000,
+            bytesPerSec: 1850000,
+            etaSec: 40,
+            error: "",
+            open: false,
+            files: [
+              { id: "f1", name: "01.jpg", status: "done", bytesReceived: 8200000, bytesTotal: 8200000 },
+              { id: "f2", name: "02.jpg", status: "done", bytesReceived: 9100000, bytesTotal: 9100000 },
+              { id: "f3", name: "03.jpg", status: "downloading", bytesReceived: 4200000, bytesTotal: 9800000 },
+              { id: "f4", name: "04.jpg", status: "pending", bytesReceived: 0, bytesTotal: 0 }
+            ]
+          },
+          {
+            id: "q-demo-2",
+            title: "霓虹港湾",
+            url: "https://xchina.co/photo/id-ex04.html",
+            source: "xchina",
+            status: "queued",
+            done: 0,
+            total: 9,
+            bytesReceived: 0,
+            bytesTotal: 86100000,
+            bytesPerSec: 0,
+            etaSec: null,
+            error: "",
+            open: false,
+            files: [
+              { id: "f5", name: "01.jpg", status: "pending", bytesReceived: 0, bytesTotal: 0 },
+              { id: "f6", name: "02.jpg", status: "pending", bytesReceived: 0, bytesTotal: 0 }
+            ]
+          },
+          {
+            id: "q-demo-3",
+            title: "天际漫步",
+            url: "https://t.me/channel/103",
+            source: "telegram",
+            status: "paused",
+            done: 7,
+            total: 15,
+            bytesReceived: 41200000,
+            bytesTotal: 86600000,
+            bytesPerSec: 0,
+            etaSec: null,
+            error: "",
+            open: false,
+            files: [
+              { id: "f7", name: "07.jpg", status: "done", bytesReceived: 6400000, bytesTotal: 6400000 },
+              { id: "f8", name: "08.jpg", status: "pending", bytesReceived: 0, bytesTotal: 0 }
+            ]
+          },
+          {
+            id: "q-demo-4",
+            title: "金色轨道",
+            url: "https://telegra.ph/gold-01-01",
+            source: "telegraph",
+            status: "failed",
+            done: 3,
+            total: 11,
+            bytesReceived: 18000000,
+            bytesTotal: 72800000,
+            bytesPerSec: 0,
+            etaSec: null,
+            error: "CDN 超时（可重试）",
+            open: false,
+            files: [
+              { id: "f9", name: "04.jpg", status: "failed", bytesReceived: 0, bytesTotal: 6400000 }
+            ]
+          },
+          {
+            id: "q-demo-5",
+            title: "雾隐山脊（完成样例）",
+            url: "https://xchina.co/photo/id-ex05.html",
+            source: "xchina",
+            status: "done",
+            done: 6,
+            total: 6,
+            bytesReceived: 41000000,
+            bytesTotal: 41000000,
+            bytesPerSec: 0,
+            etaSec: null,
+            error: "",
+            open: false,
+            files: []
+          }
+        ],
+        subs: [
+          { id: "s1", label: "星际远征", url: "https://xchina.co/photo/id-ex01.html", enabled: true, last: "ok · 12 张" },
+          { id: "s2", label: "深空回廊", url: "https://xchina.co/photo/id-ex07.html", enabled: false, last: "尚未检查" }
+        ],
+        dock: { visible: true, expanded: false, paused: false, setId: "g1", title: "星际远征", art: 0, done: 48.7, total: 122.4 },
+        menuSetId: null,
+        openSetId: null,
+        lightIndex: null,
+        galleryOverflowOpen: false,
+        gallerySelectMode: false,
+        gallerySelected: {},
+        galleryDensity: "standard",
+        thumbCtxIndex: null
+      };
+
+      var els = {
+        grid: document.getElementById("wall-grid"),
+        empty: document.getElementById("browse-empty"),
+        title: document.getElementById("browse-title"),
+        meta: document.getElementById("browse-meta"),
+        countAll: document.getElementById("count-all"),
+        countFav: document.getElementById("count-fav"),
+        authors: document.getElementById("authors-section"),
+        playlists: document.getElementById("playlists-section"),
+        search: document.getElementById("search-input"),
+        dock: document.getElementById("dock"),
+        dockSummary: document.getElementById("dock-summary"),
+        dockFill: document.getElementById("dock-fill"),
+        dockList: document.getElementById("dock-list"),
+        dockToggle: document.getElementById("dock-toggle"),
+        dockChevron: document.getElementById("dock-chevron"),
+        queue: document.getElementById("queue-list"),
+        queueEmpty: document.getElementById("queue-empty"),
+        queueSummary: document.getElementById("queue-summary"),
+        acqStats: document.getElementById("acq-stats"),
+        urls: document.getElementById("url-input"),
+        modal: document.getElementById("modal-root"),
+        plName: document.getElementById("playlist-name"),
+        menu: document.getElementById("card-menu"),
+        toasts: document.getElementById("toasts"),
+        acquireDot: document.getElementById("acquire-dot"),
+        galleryTitle: document.getElementById("gallery-title"),
+        galleryCover: document.getElementById("gallery-cover"),
+        galleryChips: document.getElementById("gallery-chips"),
+        galleryNavHint: document.getElementById("gallery-nav-hint"),
+        galleryFav: document.getElementById("gallery-fav-btn"),
+        galleryFavLabel: document.getElementById("gallery-fav-label"),
+        galleryOverflow: document.getElementById("gallery-overflow"),
+        thumbGrid: document.getElementById("thumb-grid"),
+        galleryEmpty: document.getElementById("gallery-empty"),
+        galleryToolsMeta: document.getElementById("gallery-tools-meta"),
+        gallerySelectBtn: document.getElementById("gallery-select-btn"),
+        gallerySelectBar: document.getElementById("gallery-select-bar"),
+        gallerySelectDelete: document.getElementById("gallery-select-delete"),
+        thumbCtx: document.getElementById("thumb-ctx"),
+        lightbox: document.getElementById("lightbox"),
+        lbTitle: document.getElementById("lb-title"),
+        lbMeta: document.getElementById("lb-meta"),
+        lbArt: document.getElementById("lb-art"),
+        lbFilm: document.getElementById("lb-film"),
+        lbPrev: document.getElementById("lb-prev"),
+        lbNext: document.getElementById("lb-next"),
+        browseDrop: document.getElementById("browse-drop"),
+        browseScroll: document.getElementById("browse-scroll"),
+        urlDrop: document.getElementById("url-drop"),
+        subList: document.getElementById("sub-list"),
+        subUrl: document.getElementById("sub-url"),
+        tabQueue: document.getElementById("tab-queue"),
+        tabSubs: document.getElementById("tab-subs"),
+        btnRetryFailed: document.getElementById("btn-retry-failed"),
+        btnClearDone: document.getElementById("btn-clear-done")
+      };
+
+      function byId(id) {
+        for (var i = 0; i < SETS.length; i++) if (SETS[i].id === id) return SETS[i];
+        return null;
+      }
+
+      function imageCount(set) {
+        return set.images ? set.images.length : 0;
+      }
+
+      function toast(msg) {
+        var t = document.createElement("div");
+        t.className = "toast";
+        t.textContent = msg;
+        els.toasts.appendChild(t);
+        setTimeout(function () {
+          t.style.opacity = "0";
+          t.style.transition = "opacity 0.3s";
+          setTimeout(function () { t.remove(); }, 300);
+        }, 2200);
+      }
+
+      function authorCount(name) {
+        return SETS.filter(function (s) { return s.author === name; }).length;
+      }
+
+      function playlistCount(id) {
+        return SETS.filter(function (s) { return s.playlist.indexOf(id) !== -1; }).length;
+      }
+
+      function filtered() {
+        var q = state.query.trim().toLowerCase();
+        var list = SETS.filter(function (s) {
+          if (state.selection.kind === "favorite" && !s.favorite) return false;
+          if (state.selection.kind === "author" && s.author !== state.selection.author) return false;
+          if (state.selection.kind === "playlist" && s.playlist.indexOf(state.selection.id) === -1) return false;
+          if (!q) return true;
+          return (
+            s.title.toLowerCase().indexOf(q) !== -1 ||
+            s.author.toLowerCase().indexOf(q) !== -1 ||
+            s.type.toLowerCase().indexOf(q) !== -1
+          );
+        });
+        list.sort(function (a, b) {
+          if (state.sort === "title") return a.title.localeCompare(b.title, "zh");
+          if (state.sort === "author") return a.author.localeCompare(b.author, "en") || a.title.localeCompare(b.title, "zh");
+          return b.recent - a.recent;
+        });
+        return list;
+      }
+
+      function setMode(mode) {
+        state.mode = mode;
+        document.querySelectorAll(".view").forEach(function (v) {
+          v.classList.toggle("active", v.id === "view-" + mode);
+        });
+        document.querySelectorAll(".icon-btn[data-mode]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-mode") === mode);
+        });
+        if (mode !== "gallery") {
+          state.openSetId = null;
+          state.gallerySelectMode = false;
+          state.gallerySelected = {};
+          closeLightbox();
+          closeGalleryOverflow();
+          closeThumbCtx();
+        }
+        if (mode === "acquire") {
+          renderAcquire();
+          renderQueue();
+          renderSubs();
+        }
+        if (mode === "settings") {
+          setSettingsGroup(state.settingsGroup);
+        }
+        renderDock();
+      }
+
+      function sourceLabel(src) {
+        if (src === "local") return "本地";
+        if (src === "xchina") return "xChina";
+        if (src === "telegram") return "Telegram";
+        if (src === "telegraph") return "Telegraph";
+        return src || "未知";
+      }
+
+      function activeQueueCount() {
+        return state.queue.filter(function (t) {
+          return t.status === "downloading" || t.status === "queued" || t.status === "paused" || t.status === "resolving";
+        }).length;
+      }
+
+      function failedQueueCount() {
+        return state.queue.filter(function (t) { return t.status === "failed"; }).length;
+      }
+
+      function doneQueueCount() {
+        return state.queue.filter(function (t) { return t.status === "done" || t.status === "completed"; }).length;
+      }
+
+      function taskById(id) {
+        for (var i = 0; i < state.queue.length; i++) if (state.queue[i].id === id) return state.queue[i];
+        return null;
+      }
+
+      function formatBytes(n) {
+        if (n == null || n < 0) return "";
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+        return (n / (1024 * 1024)).toFixed(1) + " MB";
+      }
+
+      function formatSpeed(bps) {
+        if (!bps || bps <= 0) return "";
+        if (bps < 1024) return bps + " B/s";
+        if (bps < 1024 * 1024) return (bps / 1024).toFixed(1) + " KB/s";
+        return (bps / (1024 * 1024)).toFixed(1) + " MB/s";
+      }
+
+      function formatEta(sec) {
+        if (sec == null || sec < 0) return "";
+        if (sec < 60) return "约 " + sec + "s";
+        var m = Math.floor(sec / 60);
+        var s = sec % 60;
+        return "约 " + m + "m " + s + "s";
+      }
+
+      function taskPercent(t) {
+        if (t.bytesTotal && t.bytesTotal > 0 && t.bytesReceived != null) {
+          return Math.min(100, Math.round((t.bytesReceived / t.bytesTotal) * 100));
+        }
+        if (t.total > 0) return Math.min(100, Math.round((t.done / t.total) * 100));
+        return t.pct || 0;
+      }
+
+      var STATUS_LABEL = {
+        queued: "等待",
+        resolving: "解析中",
+        downloading: "下载中",
+        paused: "已暂停",
+        done: "完成",
+        completed: "完成",
+        failed: "失败",
+        cancelled: "已取消",
+        skipped: "跳过"
+      };
+
+      var FILE_STATUS = {
+        pending: "等待",
+        downloading: "下载中",
+        done: "完成",
+        failed: "失败"
+      };
+
+      function syncAcquireChrome() {
+        var n = activeQueueCount();
+        var f = failedQueueCount();
+        var d = doneQueueCount();
+        els.acquireDot.hidden = n === 0;
+        var nq = document.getElementById("nav-queue-count");
+        if (nq) {
+          nq.hidden = n === 0;
+          nq.textContent = String(n);
+        }
+        var ns = document.getElementById("nav-subs-count");
+        if (ns) {
+          ns.hidden = state.subs.length === 0;
+          ns.textContent = String(state.subs.length);
+        }
+        if (els.btnRetryFailed) {
+          els.btnRetryFailed.hidden = f === 0;
+          els.btnRetryFailed.textContent = "重试全部失败（" + f + "）";
+        }
+        if (els.btnClearDone) {
+          els.btnClearDone.hidden = d === 0;
+          els.btnClearDone.textContent = "清除已完成（" + d + "）";
+        }
+        if (els.acqStats) {
+          els.acqStats.innerHTML =
+            '<span class="stat-chip' + (n ? " live" : "") + '">进行中 <strong>' + n + "</strong></span>" +
+            (f ? '<span class="stat-chip bad">失败 <strong>' + f + "</strong></span>" : "") +
+            '<span class="stat-chip">队列 <strong>' + state.queue.length + "</strong></span>";
+        }
+        if (els.queueSummary) {
+          els.queueSummary.textContent =
+            "下载列表 · " + state.queue.length + " 项" +
+            (n ? " · " + n + " 进行中" : "") +
+            (f ? " · " + f + " 失败" : "") +
+            " · 可暂停 / 重排 / 明细 / 重试";
+        }
+      }
+
+      function setAcqSeg(seg) {
+        state.acqSeg = seg;
+        document.querySelectorAll("[data-acq-seg]").forEach(function (b) {
+          var on = b.getAttribute("data-acq-seg") === seg;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        document.querySelectorAll("[data-acq-pane]").forEach(function (p) {
+          p.classList.toggle("active", p.getAttribute("data-acq-pane") === seg);
+        });
+        if (seg === "queue") renderQueue();
+        if (seg === "subs") renderSubs();
+      }
+
+      function setDownloadSource(src) {
+        state.downloadSource = src;
+        document.querySelectorAll("[data-source]").forEach(function (b) {
+          var on = b.getAttribute("data-source") === src;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        if (els.urls) els.urls.placeholder = SOURCE_PLACEHOLDERS[src] || SOURCE_PLACEHOLDERS.xchina;
+        var btn = document.getElementById("btn-enqueue");
+        if (btn) btn.textContent = src === "xchina" ? "开始下载" : "解析资源";
+        var hint = document.getElementById("url-hint");
+        if (hint) {
+          hint.textContent =
+            src === "xchina"
+              ? "xChina · 支持一次多条；完成后自动入库"
+              : src === "telegram"
+                ? "Telegram · 可合并多链接为一套图"
+                : "Telegraph · 每次一条链接，解析后勾选";
+        }
+      }
+
+      function resolveTheme(pref) {
+        if (pref === "light" || pref === "dark") return pref;
+        try {
+          return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark";
+        } catch (_) {
+          return "dark";
+        }
+      }
+
+      function applyTheme(pref) {
+        state.theme = pref || state.theme || "dark";
+        var resolved = resolveTheme(state.theme);
+        document.documentElement.setAttribute("data-theme", resolved);
+        var sel = document.getElementById("set-theme");
+        if (sel) sel.value = state.theme;
+        document.querySelectorAll("#theme-seg [data-theme-val]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-theme-val") === state.theme);
+        });
+      }
+
+      function setSettingsGroup(group) {
+        state.settingsGroup = group;
+        document.querySelectorAll("[data-set-group]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-set-group") === group);
+        });
+        document.querySelectorAll("[data-set-pane]").forEach(function (p) {
+          p.classList.toggle("active", p.getAttribute("data-set-pane") === group);
+        });
+      }
+
+      function renderAcquire() {
+        setAcqSeg(state.acqSeg);
+        setDownloadSource(state.downloadSource);
+        syncAcquireChrome();
+      }
+
+      function renderSubs() {
+        if (!els.subList) return;
+        if (!state.subs.length) {
+          els.subList.innerHTML = '<li class="empty-hint" style="list-style:none">暂无订阅。添加网络源 URL 后可定期检查更新。</li>';
+          return;
+        }
+        els.subList.innerHTML = state.subs.map(function (s) {
+          return (
+            '<li class="sub-item" data-sub="' + s.id + '">' +
+              '<label>' +
+                '<input type="checkbox" data-sub-toggle ' + (s.enabled ? "checked" : "") + " />" +
+                "<span><strong>" + escapeHtml(s.label) + '</strong>' +
+                '<span class="muted"> · ' + escapeHtml(s.url) + "</span></span>" +
+              "</label>" +
+              '<div class="sub-meta">' +
+                "<span>" + escapeHtml(s.last || "尚未检查") + "</span>" +
+                '<button type="button" class="btn tiny" data-sub-del>删除</button>' +
+              "</div>" +
+            "</li>"
+          );
+        }).join("");
+        els.subList.querySelectorAll("[data-sub]").forEach(function (row) {
+          var id = row.getAttribute("data-sub");
+          var sub = state.subs.find(function (x) { return x.id === id; });
+          if (!sub) return;
+          var cb = row.querySelector("[data-sub-toggle]");
+          if (cb) {
+            cb.addEventListener("change", function () {
+              sub.enabled = cb.checked;
+              toast(sub.enabled ? "已启用订阅" : "已暂停订阅");
+            });
+          }
+          var del = row.querySelector("[data-sub-del]");
+          if (del) {
+            del.addEventListener("click", function () {
+              state.subs = state.subs.filter(function (x) { return x.id !== id; });
+              renderSubs();
+              syncAcquireChrome();
+              toast("已删除订阅");
+            });
+          }
+        });
+      }
+
+      function closeGalleryOverflow() {
+        state.galleryOverflowOpen = false;
+        if (els.galleryOverflow) els.galleryOverflow.classList.remove("open");
+        var more = document.getElementById("gallery-more-btn");
+        if (more) more.setAttribute("aria-expanded", "false");
+      }
+
+      function selectBrowse(sel) {
+        state.selection = sel;
+        setMode("browse");
+        renderRail();
+        renderGrid();
+      }
+
+      function titleForSelection() {
+        if (state.selection.kind === "all") return "全部套图";
+        if (state.selection.kind === "favorite") return "收藏";
+        if (state.selection.kind === "author") return state.selection.author;
+        if (state.selection.kind === "playlist") return state.selection.name;
+        return "套图";
+      }
+
+      function renderRail() {
+        els.countAll.textContent = String(SETS.length);
+        els.countFav.textContent = String(SETS.filter(function (s) { return s.favorite; }).length);
+
+        document.querySelectorAll(".rail-item[data-sel]").forEach(function (btn) {
+          var sel = JSON.parse(btn.getAttribute("data-sel"));
+          var active = sel.kind === state.selection.kind &&
+            (!sel.author || sel.author === state.selection.author) &&
+            (!sel.id || sel.id === state.selection.id);
+          btn.classList.toggle("active", active);
+        });
+
+        var aHtml = '<div class="rail-label">作者</div>';
+        AUTHORS.slice(0, 3).forEach(function (a) {
+          var active = state.selection.kind === "author" && state.selection.author === a.name;
+          aHtml +=
+            '<button type="button" class="rail-item avatar-row' + (active ? " active" : "") + '" data-sel=\'' +
+            JSON.stringify({ kind: "author", author: a.name }) + "'>" +
+            '<span class="avatar" aria-hidden="true">' + a.initial + "</span>" +
+            '<span class="name">' + a.name + "</span>" +
+            '<span class="count">' + authorCount(a.name) + "</span></button>";
+        });
+        aHtml += '<button type="button" class="link-more" id="btn-more-authors">查看更多</button>';
+        els.authors.innerHTML = aHtml;
+
+        var pHtml = '<div class="rail-label">播放列表</div>';
+        PLAYLISTS.forEach(function (p) {
+          var active = state.selection.kind === "playlist" && state.selection.id === p.id;
+          pHtml +=
+            '<button type="button" class="rail-item' + (active ? " active" : "") + '" data-sel=\'' +
+            JSON.stringify({ kind: "playlist", id: p.id, name: p.name }) + "'>" +
+            '<span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M8 6h11M8 12h11M8 18h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="5" cy="6" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="18" r="1.2" fill="currentColor"/></svg></span>' +
+            '<span class="name">' + p.name + "</span>" +
+            '<span class="count">' + playlistCount(p.id) + "</span></button>";
+        });
+        els.playlists.innerHTML = pHtml;
+
+        els.authors.querySelectorAll("[data-sel]").forEach(bindSel);
+        els.playlists.querySelectorAll("[data-sel]").forEach(bindSel);
+        var more = document.getElementById("btn-more-authors");
+        if (more) {
+          more.addEventListener("click", function () {
+            toast("已显示全部 " + AUTHORS.length + " 位作者");
+            var extra = AUTHORS.slice(3);
+            if (!extra.length) return;
+            extra.forEach(function (a) {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "rail-item avatar-row";
+              btn.setAttribute("data-sel", JSON.stringify({ kind: "author", author: a.name }));
+              btn.innerHTML =
+                '<span class="avatar" aria-hidden="true">' + a.initial + "</span>" +
+                '<span class="name">' + a.name + "</span>" +
+                '<span class="count">' + authorCount(a.name) + "</span>";
+              more.before(btn);
+              bindSel(btn);
+            });
+            more.remove();
+          });
+        }
+      }
+
+      function bindSel(btn) {
+        btn.addEventListener("click", function () {
+          selectBrowse(JSON.parse(btn.getAttribute("data-sel")));
+        });
+      }
+
+      function heartSvg(filled) {
+        if (filled) {
+          return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 19.2S5 14.8 3.2 11C1.6 7.9 3.6 4.5 7.1 4.5c1.9 0 3.3 1.2 3.9 2 .6-.8 2-2 3.9-2 3.5 0 5.5 3.4 3.9 6.5-1.8 3.8-8.8 8.2-8.8 8.2z"/></svg>';
+        }
+        return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19s-6.5-4.1-8.5-7.8C1.7 8.1 3.5 5 6.8 5c1.9 0 3.2 1.1 3.7 1.7.5-.6 1.8-1.7 3.7-1.7 3.3 0 5.1 3.1 3.3 6.2C18.5 14.9 12 19 12 19z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+      }
+
+      function moreSvg() {
+        return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>';
+      }
+
+      function stackSvg() {
+        return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="7" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M7 7V6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1" stroke="currentColor" stroke-width="1.6"/></svg>';
+      }
+
+      function renderGrid() {
+        var list = filtered();
+        els.title.textContent = titleForSelection();
+        var totalImgs = list.reduce(function (n, s) { return n + imageCount(s); }, 0);
+        var localN = list.filter(function (s) { return s.source === "local"; }).length;
+        els.meta.textContent =
+          list.length + " 套 · 本地库" +
+          (totalImgs ? " · " + totalImgs + " 张" : "") +
+          (localN ? " · " + localN + " 套为本机导入" : "") +
+          (state.query ? " · 筛选「" + state.query + "」" : "");
+        els.empty.hidden = list.length > 0;
+        els.grid.innerHTML = "";
+        list.forEach(function (s) {
+          var n = imageCount(s);
+          var card = document.createElement("article");
+          card.className = "card";
+          card.tabIndex = 0;
+          card.setAttribute("data-id", s.id);
+          card.setAttribute("aria-label", s.title + "，套图 " + n + " 张");
+          card.innerHTML =
+            '<div class="cover">' +
+              '<div class="art ' + ARTS[s.coverArt] + '"></div>' +
+              '<span class="type">' + (s.source === "local" ? "本地" : s.type) + "</span>" +
+              '<span class="count-badge">' + stackSvg() + n + " 张</span>" +
+              (state.hoverPreview ? '<div class="overlay"><span class="open-label">打开套图</span></div>' : "") +
+            "</div>" +
+            '<div class="card-meta">' +
+              '<div class="title">' + escapeHtml(s.title) + "</div>" +
+              '<div class="card-actions">' +
+                '<button type="button" class="ghost-ico' + (s.favorite ? " is-fav" : "") + '" data-act="fav" title="收藏" aria-label="切换收藏">' + heartSvg(s.favorite) + "</button>" +
+                '<button type="button" class="ghost-ico" data-act="more" title="更多" aria-label="更多操作" aria-haspopup="menu">' + moreSvg() + "</button>" +
+              "</div>" +
+              '<div class="author">' + escapeHtml(s.author) + " · " + n + " 张 · " + sourceLabel(s.source) + "</div>" +
+            "</div>";
+          card.addEventListener("click", function (e) {
+            if (e.target.closest("[data-act]")) return;
+            openGallery(s.id);
+          });
+          card.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openGallery(s.id);
+            }
+          });
+          card.querySelector('[data-act="fav"]').addEventListener("click", function (e) {
+            e.stopPropagation();
+            s.favorite = !s.favorite;
+            renderRail();
+            renderGrid();
+            if (state.notify) toast(s.favorite ? "已收藏「" + s.title + "」" : "已取消收藏");
+          });
+          card.querySelector('[data-act="more"]').addEventListener("click", function (e) {
+            e.stopPropagation();
+            openMenu(s.id, e.currentTarget);
+          });
+          els.grid.appendChild(card);
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+        });
+      }
+
+      function openGallery(id) {
+        var s = byId(id);
+        if (!s) return;
+        state.openSetId = id;
+        state.gallerySelectMode = false;
+        state.gallerySelected = {};
+        closeThumbCtx();
+        setMode("gallery");
+        renderGallery();
+      }
+
+      function coverIndexOf(s) {
+        if (s.coverIdx != null && s.coverIdx >= 0 && s.coverIdx < s.images.length) return s.coverIdx;
+        return 0;
+      }
+
+      function selectedCount() {
+        return Object.keys(state.gallerySelected).filter(function (k) {
+          return state.gallerySelected[k];
+        }).length;
+      }
+
+      function closeThumbCtx() {
+        state.thumbCtxIndex = null;
+        if (els.thumbCtx) els.thumbCtx.classList.remove("open");
+      }
+
+      function openThumbCtx(idx, x, y) {
+        state.thumbCtxIndex = idx;
+        if (!els.thumbCtx) return;
+        els.thumbCtx.classList.add("open");
+        var w = 168;
+        var h = 120;
+        var left = Math.min(x, window.innerWidth - w - 8);
+        var top = Math.min(y, window.innerHeight - h - 8);
+        els.thumbCtx.style.left = Math.max(8, left) + "px";
+        els.thumbCtx.style.top = Math.max(8, top) + "px";
+      }
+
+      function renderGallery() {
+        var s = byId(state.openSetId);
+        if (!s) {
+          setMode("browse");
+          return;
+        }
+        var n = imageCount(s);
+        var cIdx = coverIndexOf(s);
+        var coverImg = s.images[cIdx] || s.images[0];
+        els.galleryTitle.textContent = s.title;
+        if (els.galleryNavHint) {
+          els.galleryNavHint.textContent =
+            sourceLabel(s.source) + " · " + n + " 张 · " + (s.size || "—");
+        }
+        if (els.galleryCover && coverImg) {
+          els.galleryCover.innerHTML =
+            '<div class="art ' + ARTS[coverImg.art] + '"></div>' +
+            '<span class="gallery-cover-badge">封面</span>';
+        }
+        if (els.galleryChips) {
+          els.galleryChips.innerHTML =
+            '<span class="g-chip"><strong>' + escapeHtml(s.author || "未知作者") + "</strong></span>" +
+            '<span class="g-chip"><strong>' + n + "</strong> 图</span>" +
+            '<span class="g-chip">' + escapeHtml(s.size || "—") + "</span>" +
+            '<span class="g-chip">' + escapeHtml(s.type || "静态") + "</span>" +
+            '<span class="g-chip">' + escapeHtml(sourceLabel(s.source)) + "</span>" +
+            (s.favorite ? '<span class="g-chip accent">已收藏</span>' : "") +
+            '<span class="g-chip ok">已入库</span>';
+        }
+        if (els.galleryFavLabel) {
+          els.galleryFavLabel.textContent = s.favorite ? "已收藏" : "收藏";
+        }
+        if (els.galleryFav) {
+          els.galleryFav.classList.toggle("is-on", !!s.favorite);
+        }
+        var selN = selectedCount();
+        if (els.gallerySelectBtn) {
+          els.gallerySelectBtn.textContent = state.gallerySelectMode ? "取消多选" : "多选";
+          els.gallerySelectBtn.classList.toggle("is-on", state.gallerySelectMode);
+        }
+        if (els.gallerySelectBar) {
+          els.gallerySelectBar.classList.toggle("show", state.gallerySelectMode && selN > 0);
+        }
+        if (els.gallerySelectDelete) {
+          els.gallerySelectDelete.textContent = "删除所选 (" + selN + ")";
+        }
+        if (els.galleryToolsMeta) {
+          els.galleryToolsMeta.textContent = state.gallerySelectMode
+            ? (selN ? "已选 " + selN + " 张" : "点缩略图勾选 · 右键设封面")
+            : "点击预览 · 右键更多 · 本地内容";
+        }
+        if (els.thumbGrid) {
+          els.thumbGrid.setAttribute("data-density", state.galleryDensity || "standard");
+        }
+        document.querySelectorAll(".density-group [data-density]").forEach(function (b) {
+          b.classList.toggle("active", b.getAttribute("data-density") === state.galleryDensity);
+        });
+        els.galleryEmpty.hidden = n > 0;
+        els.thumbGrid.innerHTML = "";
+        s.images.forEach(function (img, idx) {
+          var wrap = document.createElement("div");
+          wrap.className = "thumb-wrap" + (state.gallerySelected[idx] ? " selected" : "");
+          var checkHtml = "";
+          if (state.gallerySelectMode) {
+            checkHtml =
+              '<label class="thumb-check" aria-label="选择 ' + escapeHtml(img.name) + '">' +
+                '<input type="checkbox" ' + (state.gallerySelected[idx] ? "checked" : "") + " data-idx=\"" + idx + '"/>' +
+              "</label>";
+          }
+          wrap.innerHTML =
+            checkHtml +
+            '<button type="button" class="thumb-item" aria-label="预览 ' + escapeHtml(img.name) + '" data-idx="' + idx + '">' +
+              '<div class="thumb-frame">' +
+                '<div class="art ' + ARTS[img.art] + '"></div>' +
+                '<div class="hover-veil"><span>预览</span></div>' +
+                (idx === cIdx ? '<span class="cover-tag">封面</span>' : "") +
+                '<span class="idx">' + pad2(idx + 1) + "</span>" +
+              "</div>" +
+              '<div class="thumb-cap">' +
+                '<span class="name">' + escapeHtml(img.name) + "</span>" +
+                '<span class="res">' + escapeHtml(img.res) + "</span>" +
+              "</div>" +
+            "</button>";
+          var btn = wrap.querySelector(".thumb-item");
+          btn.addEventListener("click", function () {
+            if (state.gallerySelectMode) {
+              state.gallerySelected[idx] = !state.gallerySelected[idx];
+              if (!state.gallerySelected[idx]) delete state.gallerySelected[idx];
+              renderGallery();
+              return;
+            }
+            openLightbox(idx);
+          });
+          btn.addEventListener("contextmenu", function (e) {
+            e.preventDefault();
+            openThumbCtx(idx, e.clientX, e.clientY);
+          });
+          var cb = wrap.querySelector('input[type="checkbox"]');
+          if (cb) {
+            cb.addEventListener("click", function (e) {
+              e.stopPropagation();
+            });
+            cb.addEventListener("change", function () {
+              state.gallerySelected[idx] = cb.checked;
+              if (!cb.checked) delete state.gallerySelected[idx];
+              renderGallery();
+            });
+          }
+          els.thumbGrid.appendChild(wrap);
+        });
+      }
+
+      function openLightbox(index) {
+        var s = byId(state.openSetId);
+        if (!s || !s.images.length) return;
+        state.lightIndex = Math.max(0, Math.min(s.images.length - 1, index));
+        els.lightbox.classList.add("open");
+        renderLightbox();
+      }
+
+      function closeLightbox() {
+        state.lightIndex = null;
+        els.lightbox.classList.remove("open");
+      }
+
+      function renderLightbox() {
+        var s = byId(state.openSetId);
+        if (!s || state.lightIndex == null) return;
+        var imgs = s.images;
+        var i = state.lightIndex;
+        var img = imgs[i];
+        els.lbTitle.textContent = s.title + " · " + img.name;
+        els.lbMeta.textContent = pad2(i + 1) + " / " + pad2(imgs.length);
+        els.lbArt.className = "art " + ARTS[img.art];
+        els.lbPrev.disabled = i <= 0;
+        els.lbNext.disabled = i >= imgs.length - 1;
+        els.lbFilm.innerHTML = "";
+        imgs.forEach(function (im, idx) {
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "lb-chip" + (idx === i ? " active" : "");
+          chip.setAttribute("aria-label", "第 " + (idx + 1) + " 张");
+          chip.innerHTML = '<div class="art ' + ARTS[im.art] + '"></div>';
+          chip.addEventListener("click", function () {
+            state.lightIndex = idx;
+            renderLightbox();
+          });
+          els.lbFilm.appendChild(chip);
+        });
+        var activeChip = els.lbFilm.querySelector(".lb-chip.active");
+        if (activeChip) {
+          activeChip.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+        }
+      }
+
+      function stepLightbox(delta) {
+        var s = byId(state.openSetId);
+        if (!s || state.lightIndex == null) return;
+        var next = state.lightIndex + delta;
+        if (next < 0 || next >= s.images.length) return;
+        state.lightIndex = next;
+        renderLightbox();
+      }
+
+      function openMenu(id, anchor) {
+        var s = byId(id);
+        if (!s) return;
+        state.menuSetId = id;
+        var r = anchor.getBoundingClientRect();
+        var redownloadItem =
+          s.source !== "local" && s.sourceUrl
+            ? '<button type="button" role="menuitem" data-m="redownload">重新下载（网络）</button>'
+            : "";
+        els.menu.innerHTML =
+          '<button type="button" role="menuitem" data-m="open">打开套图</button>' +
+          '<button type="button" role="menuitem" data-m="fav">' + (s.favorite ? "取消收藏" : "加入收藏") + "</button>" +
+          '<button type="button" role="menuitem" data-m="folder">打开文件夹</button>' +
+          '<button type="button" role="menuitem" data-m="author">查看作者</button>' +
+          redownloadItem +
+          '<button type="button" role="menuitem" class="danger" data-m="hide">删除套图</button>';
+        els.menu.classList.add("open");
+        var mw = 180;
+        var left = Math.min(window.innerWidth - mw - 8, r.right - mw);
+        var top = r.bottom + 6;
+        els.menu.style.left = left + "px";
+        els.menu.style.top = top + "px";
+        els.menu.querySelectorAll("[data-m]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            handleMenu(btn.getAttribute("data-m"));
+          });
+        });
+      }
+
+      function closeMenu() {
+        els.menu.classList.remove("open");
+        state.menuSetId = null;
+      }
+
+      function handleMenu(act) {
+        var s = byId(state.menuSetId);
+        closeMenu();
+        if (!s) return;
+        if (act === "open") {
+          openGallery(s.id);
+        } else if (act === "fav") {
+          s.favorite = !s.favorite;
+          renderRail();
+          renderGrid();
+        } else if (act === "folder") {
+          toast("打开本地目录：「" + s.title + "」");
+        } else if (act === "author") {
+          selectBrowse({ kind: "author", author: s.author });
+        } else if (act === "redownload") {
+          redownloadFromNetwork(s);
+        } else if (act === "hide") {
+          var idx = SETS.indexOf(s);
+          if (idx !== -1) SETS.splice(idx, 1);
+          renderRail();
+          renderGrid();
+          toast("已从本地库移除");
+        }
+      }
+
+      function makeTask(title, url, source, status) {
+        var total = 6 + Math.floor(Math.random() * 8);
+        var totalBytes = (40 + Math.random() * 90) * 1024 * 1024;
+        return {
+          id: "q" + Date.now() + Math.random().toString(36).slice(2, 7),
+          title: title,
+          url: url,
+          source: source,
+          status: status || "downloading",
+          done: 0,
+          total: total,
+          bytesReceived: 0,
+          bytesTotal: Math.round(totalBytes),
+          bytesPerSec: status === "downloading" ? 900000 + Math.random() * 1200000 : 0,
+          etaSec: status === "downloading" ? 60 : null,
+          error: "",
+          open: false,
+          files: [
+            { id: "nf1", name: "01.jpg", status: status === "downloading" ? "downloading" : "pending", bytesReceived: 0, bytesTotal: Math.round(totalBytes / total) },
+            { id: "nf2", name: "02.jpg", status: "pending", bytesReceived: 0, bytesTotal: 0 }
+          ]
+        };
+      }
+
+      /** 库页不下载：重新下载只把网络 URL 交给获取队列 */
+      function redownloadFromNetwork(s) {
+        if (!s || s.source === "local" || !s.sourceUrl) {
+          toast("此套图为本地导入，没有网络源");
+          return;
+        }
+        if (!window.confirm("重新下载将覆盖本地图片，并加入获取页队列，继续？")) return;
+        enqueueUrls([s.sourceUrl], s.source, s.title);
+        setMode("acquire");
+        setAcqSeg("queue");
+      }
+
+      function enqueueUrls(lines, source, forcedTitle) {
+        var src = source || state.downloadSource;
+        lines.forEach(function (line, i) {
+          var title = forcedTitle || line.replace(/^https?:\/\//, "").slice(0, 42) || ("任务 " + (i + 1));
+          var st = i === 0 && !state.queue.some(function (t) { return t.status === "downloading"; })
+            ? "downloading"
+            : "queued";
+          state.queue.unshift(makeTask(title, line, src, st));
+        });
+        var top = state.queue.find(function (t) { return t.status === "downloading"; }) || state.queue[0];
+        if (top) startDockForTask(top);
+        syncAcquireChrome();
+        renderQueue();
+        renderDock();
+        if (state.notify) toast("已加入获取队列：" + lines.length + " 个任务");
+      }
+
+      function startDockForTask(task) {
+        if (!task) return;
+        var pct = taskPercent(task) / 100;
+        state.dock.visible = true;
+        state.dock.paused = task.status === "paused";
+        state.dock.setId = null;
+        state.dock.title = task.title;
+        if (state.dock.art == null) state.dock.art = Math.floor(Math.random() * ARTS.length);
+        state.dock.done = (task.bytesReceived || 0) / (1024 * 1024);
+        state.dock.total = Math.max(0.1, (task.bytesTotal || 100 * 1024 * 1024) / (1024 * 1024));
+        if (!task.bytesReceived && pct) state.dock.done = state.dock.total * pct;
+        renderDock();
+      }
+
+      function activeTasks() {
+        return state.queue.filter(function (t) {
+          return t.status === "downloading" || t.status === "queued" || t.status === "paused" || t.status === "resolving";
+        });
+      }
+
+      function dockAggregate(active) {
+        var doneSum = 0;
+        var totalSum = 0;
+        var pctSum = 0;
+        var speed = 0;
+        var eta = null;
+        active.forEach(function (t) {
+          doneSum += t.done || 0;
+          totalSum += t.total || 0;
+          pctSum += taskPercent(t);
+          if (t.bytesPerSec && t.bytesPerSec > speed) speed = t.bytesPerSec;
+          if (t.etaSec != null && (eta == null || t.etaSec < eta)) eta = t.etaSec;
+        });
+        var pct =
+          totalSum > 0
+            ? Math.min(100, Math.round((doneSum / totalSum) * 100))
+            : Math.round(pctSum / Math.max(1, active.length));
+        // 字节级总体进度更准
+        var br = 0;
+        var bt = 0;
+        active.forEach(function (t) {
+          br += t.bytesReceived || 0;
+          bt += t.bytesTotal || 0;
+        });
+        if (bt > 0) pct = Math.min(100, Math.round((br / bt) * 100));
+        return { pct: pct, speed: speed, eta: eta, br: br, bt: bt };
+      }
+
+      function renderDock() {
+        var d = state.dock;
+        var active = activeTasks();
+        var show = d.visible && active.length > 0 && state.mode !== "settings";
+        els.dock.classList.toggle("show", !!show);
+        els.dock.classList.toggle("expanded", !!(show && d.expanded));
+        if (!show) return;
+
+        var agg = dockAggregate(active);
+        var line = "下载中 " + active.length;
+        if (agg.pct > 0 || agg.bt > 0) line += " · " + agg.pct + "%";
+        if (agg.speed > 0) line += " · " + formatSpeed(agg.speed);
+        if (agg.eta != null && agg.eta > 0) {
+          line += " · ETA " + (agg.eta < 60 ? agg.eta + "s" : Math.ceil(agg.eta / 60) + "m");
+        }
+        els.dockSummary.textContent = line;
+        els.dockFill.style.width = agg.pct + "%";
+        els.dockToggle.setAttribute("aria-expanded", d.expanded ? "true" : "false");
+        els.dockChevron.textContent = d.expanded ? "▾" : "▴";
+
+        if (!d.expanded) {
+          els.dockList.innerHTML = "";
+          return;
+        }
+
+        els.dockList.innerHTML = active.slice(0, 8).map(function (t) {
+          var pct = taskPercent(t);
+          var label = (t.title && t.title.trim()) || t.url || "未命名任务";
+          var meta = STATUS_LABEL[t.status] || t.status;
+          if (t.total > 0) meta += " " + t.done + "/" + t.total;
+          if (pct > 0) meta += " " + pct + "%";
+          return (
+            '<li data-dock-task="' + t.id + '">' +
+              '<span class="dock-item-title" title="' + label.replace(/"/g, "&quot;") + '">' + label + "</span>" +
+              '<span class="dock-item-status">' + meta + "</span>" +
+            "</li>"
+          );
+        }).join("");
+      }
+
+      function pauseTask(id) {
+        var t = taskById(id);
+        if (!t) return;
+        if (t.status === "downloading" || t.status === "queued" || t.status === "resolving") {
+          t.status = "paused";
+          t.bytesPerSec = 0;
+          t.etaSec = null;
+          if (state.dock.title === t.title) state.dock.paused = true;
+          renderQueue();
+          renderDock();
+          syncAcquireChrome();
+          toast("已暂停「" + t.title + "」");
+        }
+      }
+
+      function resumeTask(id) {
+        var t = taskById(id);
+        if (!t || t.status !== "paused") return;
+        var hasDl = state.queue.some(function (x) { return x.status === "downloading"; });
+        t.status = hasDl ? "queued" : "downloading";
+        state.dock.paused = false;
+        state.dock.visible = true;
+        if (t.status === "downloading") {
+          t.bytesPerSec = 1200000;
+          startDockForTask(t);
+        }
+        renderQueue();
+        renderDock();
+        syncAcquireChrome();
+        toast("继续「" + t.title + "」");
+      }
+
+      function cancelTask(id) {
+        var t = taskById(id);
+        if (!t) return;
+        t.status = "cancelled";
+        t.bytesPerSec = 0;
+        renderQueue();
+        syncAcquireChrome();
+        toast("已取消「" + t.title + "」");
+      }
+
+      function retryTask(id) {
+        var t = taskById(id);
+        if (!t) return;
+        t.status = "downloading";
+        t.error = "";
+        t.bytesPerSec = 1100000;
+        t.etaSec = 45;
+        t.done = Math.min(t.done, Math.max(0, t.total - 1));
+        startDockForTask(t);
+        renderQueue();
+        syncAcquireChrome();
+        toast("已重试「" + t.title + "」");
+      }
+
+      function moveTask(id, dir) {
+        var i = -1;
+        for (var k = 0; k < state.queue.length; k++) if (state.queue[k].id === id) i = k;
+        if (i < 0) return;
+        var j = dir === "up" ? i - 1 : i + 1;
+        if (j < 0 || j >= state.queue.length) return;
+        var tmp = state.queue[i];
+        state.queue[i] = state.queue[j];
+        state.queue[j] = tmp;
+        renderQueue();
+      }
+
+      function renderQueue() {
+        if (!els.queue) return;
+        syncAcquireChrome();
+        if (!state.queue.length) {
+          els.queue.innerHTML = "";
+          if (els.queueEmpty) els.queueEmpty.hidden = false;
+          return;
+        }
+        if (els.queueEmpty) els.queueEmpty.hidden = true;
+        els.queue.innerHTML = state.queue.map(function (t) {
+          var pct = taskPercent(t);
+          var st = t.status;
+          var stLabel = STATUS_LABEL[st] || st;
+          var stClass = st === "failed" ? "is-fail" : (st === "done" || st === "completed") ? "is-ok" : (st === "downloading" || st === "resolving") ? "is-run" : "";
+          var sizeLabel = "";
+          if (t.bytesReceived != null && (st === "downloading" || st === "paused" || st === "done" || st === "completed")) {
+            sizeLabel = t.bytesTotal > 0
+              ? formatBytes(t.bytesReceived) + "/" + formatBytes(t.bytesTotal)
+              : formatBytes(t.bytesReceived);
+          }
+          var showBar = (st === "downloading" || st === "resolving" || st === "paused") &&
+            ((t.bytesTotal && t.bytesTotal > 0) || t.total > 0);
+          var canCancel = st === "queued" || st === "paused" || st === "resolving" || st === "downloading";
+          var canPause = st === "queued" || st === "resolving" || st === "downloading";
+          var canResume = st === "paused";
+          var canMove = st === "queued" || st === "paused";
+          var canRetry = st === "failed" || st === "cancelled";
+          var speed = formatSpeed(t.bytesPerSec);
+          var eta = formatEta(t.etaSec);
+          var meta = '<span class="st ' + stClass + '">' + stLabel + "</span>";
+          if (sizeLabel) {
+            meta += '<span class="mono-num"> · ' + sizeLabel + (t.bytesTotal > 0 ? " · " + pct + "%" : "") + "</span>";
+          } else if (t.total > 0) {
+            meta += '<span class="mono-num"> · ' + t.done + "/" + t.total + "</span>";
+          }
+          if (t.total > 0 && sizeLabel) meta += '<span class="mono-num"> · ' + t.done + "/" + t.total + " 文件</span>";
+          if (speed) meta += '<span class="mono-num"> · ' + speed + "</span>";
+          if (eta && st === "downloading") meta += '<span class="mono-num"> · ' + eta + "</span>";
+          meta += '<span class="mono-num"> · ' + sourceLabel(t.source) + "</span>";
+
+          var filesHtml = "";
+          if (t.open && t.files && t.files.length) {
+            filesHtml = '<ul class="task-files">' + t.files.map(function (f) {
+              var fs = "";
+              if (f.bytesTotal > 0) fs = formatBytes(f.bytesReceived || 0) + "/" + formatBytes(f.bytesTotal);
+              else if (f.bytesReceived) fs = formatBytes(f.bytesReceived);
+              return (
+                '<li class="task-file">' +
+                  "<span>" + escapeHtml(f.name) + "</span>" +
+                  '<span class="muted">' + (FILE_STATUS[f.status] || f.status) + "</span>" +
+                  (fs ? '<span class="mono">' + fs + "</span>" : "<span></span>") +
+                "</li>"
+              );
+            }).join("") + "</ul>";
+          }
+
+          var actions = "";
+          if (canMove) {
+            actions += '<button type="button" class="btn tiny" data-q="up" title="上移">↑</button>';
+            actions += '<button type="button" class="btn tiny" data-q="down" title="下移">↓</button>';
+          }
+          if (canPause) actions += '<button type="button" class="btn btn-ghost" data-q="pause">暂停</button>';
+          if (canResume) actions += '<button type="button" class="btn btn-primary" data-q="resume">继续</button>';
+          if (canRetry) actions += '<button type="button" class="btn btn-primary" data-q="retry">重试</button>';
+          if (canCancel) actions += '<button type="button" class="btn btn-ghost" data-q="cancel">取消</button>';
+
+          return (
+            '<li class="task-item status-' + st + '" data-task="' + t.id + '">' +
+              '<div class="task-main">' +
+                '<div class="task-title-row">' +
+                  "<strong>" + escapeHtml(t.title || t.url) + "</strong>" +
+                  (t.files && t.files.length
+                    ? '<button type="button" class="btn tiny" data-q="toggle">' + (t.open ? "收起" : "明细") + "</button>"
+                    : "") +
+                "</div>" +
+                '<div class="task-meta">' + meta + "</div>" +
+                (showBar
+                  ? '<div class="progress-track" aria-hidden="true"><div class="progress-fill" style="transform:scaleX(' + (pct / 100) + ')"></div></div>'
+                  : "") +
+                (t.error ? '<div class="task-error">' + escapeHtml(t.error) + "</div>" : "") +
+                filesHtml +
+              "</div>" +
+              '<div class="task-actions">' + actions + "</div>" +
+            "</li>"
+          );
+        }).join("");
+
+        els.queue.querySelectorAll("[data-task]").forEach(function (row) {
+          var id = row.getAttribute("data-task");
+          row.querySelectorAll("[data-q]").forEach(function (btn) {
+            btn.addEventListener("click", function (e) {
+              e.stopPropagation();
+              var act = btn.getAttribute("data-q");
+              if (act === "toggle") {
+                var t = taskById(id);
+                if (t) { t.open = !t.open; renderQueue(); }
+              } else if (act === "pause") pauseTask(id);
+              else if (act === "resume") resumeTask(id);
+              else if (act === "cancel") cancelTask(id);
+              else if (act === "retry") retryTask(id);
+              else if (act === "up") moveTask(id, "up");
+              else if (act === "down") moveTask(id, "down");
+            });
+          });
+        });
+      }
+
+      /* —— 事件 —— */
+      document.querySelectorAll(".rail-item[data-sel]").forEach(bindSel);
+      document.getElementById("btn-home").addEventListener("click", function () {
+        selectBrowse({ kind: "all" });
+      });
+      document.getElementById("btn-acquire").addEventListener("click", function () {
+        setMode("acquire");
+      });
+      document.getElementById("btn-settings").addEventListener("click", function () {
+        setMode("settings");
+      });
+      document.getElementById("btn-gallery-back").addEventListener("click", function () {
+        closeLightbox();
+        closeGalleryOverflow();
+        closeThumbCtx();
+        state.gallerySelectMode = false;
+        state.gallerySelected = {};
+        setMode("browse");
+        renderGrid();
+      });
+      els.galleryFav.addEventListener("click", function () {
+        var s = byId(state.openSetId);
+        if (!s) return;
+        s.favorite = !s.favorite;
+        renderRail();
+        renderGallery();
+        if (state.notify) toast(s.favorite ? "已收藏「" + s.title + "」" : "已取消收藏");
+      });
+      document.getElementById("gallery-folder-btn").addEventListener("click", function () {
+        var s = byId(state.openSetId);
+        if (!s) return;
+        toast("打开本地目录：「" + s.title + "」");
+      });
+      document.getElementById("gallery-more-btn").addEventListener("click", function (e) {
+        e.stopPropagation();
+        state.galleryOverflowOpen = !state.galleryOverflowOpen;
+        els.galleryOverflow.classList.toggle("open", state.galleryOverflowOpen);
+        this.setAttribute("aria-expanded", state.galleryOverflowOpen ? "true" : "false");
+      });
+      els.galleryOverflow.querySelectorAll("[data-g]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var act = btn.getAttribute("data-g");
+          var s = byId(state.openSetId);
+          closeGalleryOverflow();
+          if (!s) return;
+          if (act === "rename") {
+            var name = window.prompt("重命名套图", s.title);
+            if (name && name.trim()) {
+              s.title = name.trim();
+              renderGallery();
+              renderGrid();
+              toast("已重命名");
+            }
+          } else if (act === "redownload") {
+            redownloadFromNetwork(s);
+          } else if (act === "delete") {
+            if (!window.confirm("确定删除整套图？此操作不可恢复。")) return;
+            var idx = SETS.indexOf(s);
+            if (idx !== -1) SETS.splice(idx, 1);
+            setMode("browse");
+            renderRail();
+            renderGrid();
+            toast("已从本地库删除");
+          }
+        });
+      });
+
+      if (els.gallerySelectBtn) {
+        els.gallerySelectBtn.addEventListener("click", function () {
+          state.gallerySelectMode = !state.gallerySelectMode;
+          if (!state.gallerySelectMode) state.gallerySelected = {};
+          closeThumbCtx();
+          renderGallery();
+        });
+      }
+      var selAll = document.getElementById("gallery-select-all");
+      if (selAll) {
+        selAll.addEventListener("click", function () {
+          var s = byId(state.openSetId);
+          if (!s) return;
+          s.images.forEach(function (_, i) { state.gallerySelected[i] = true; });
+          renderGallery();
+        });
+      }
+      var selClear = document.getElementById("gallery-select-clear");
+      if (selClear) {
+        selClear.addEventListener("click", function () {
+          state.gallerySelected = {};
+          renderGallery();
+        });
+      }
+      if (els.gallerySelectDelete) {
+        els.gallerySelectDelete.addEventListener("click", function () {
+          var s = byId(state.openSetId);
+          if (!s) return;
+          var keys = Object.keys(state.gallerySelected).filter(function (k) {
+            return state.gallerySelected[k];
+          }).map(Number).sort(function (a, b) { return b - a; });
+          if (!keys.length) return;
+          if (!window.confirm("删除选中的 " + keys.length + " 张图？")) return;
+          keys.forEach(function (i) { s.images.splice(i, 1); });
+          if (s.coverIdx != null) {
+            var still = keys.indexOf(s.coverIdx) === -1;
+            if (!still) s.coverIdx = 0;
+            else {
+              var drop = keys.filter(function (k) { return k < s.coverIdx; }).length;
+              s.coverIdx = Math.max(0, s.coverIdx - drop);
+            }
+          }
+          if (s.images[0]) s.coverArt = s.images[coverIndexOf(s)].art;
+          state.gallerySelected = {};
+          renderGallery();
+          renderGrid();
+          toast("已删除 " + keys.length + " 张");
+        });
+      }
+      document.querySelectorAll(".density-group [data-density]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          state.galleryDensity = b.getAttribute("data-density") || "standard";
+          renderGallery();
+        });
+      });
+      if (els.thumbCtx) {
+        els.thumbCtx.querySelectorAll("[data-ctx]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var act = btn.getAttribute("data-ctx");
+            var s = byId(state.openSetId);
+            var i = state.thumbCtxIndex;
+            closeThumbCtx();
+            if (!s || i == null || !s.images[i]) return;
+            if (act === "preview") openLightbox(i);
+            else if (act === "cover") {
+              s.coverIdx = i;
+              s.coverArt = s.images[i].art;
+              renderGallery();
+              renderGrid();
+              toast("已设为封面");
+            } else if (act === "delete") {
+              if (!window.confirm("删除「" + s.images[i].name + "」？")) return;
+              s.images.splice(i, 1);
+              if (s.coverIdx === i) s.coverIdx = 0;
+              else if (s.coverIdx != null && s.coverIdx > i) s.coverIdx -= 1;
+              if (s.images[0]) s.coverArt = s.images[coverIndexOf(s)].art;
+              delete state.gallerySelected[i];
+              renderGallery();
+              renderGrid();
+              toast("已删除");
+            }
+          });
+        });
+      }
+
+      var goAcquire = document.getElementById("btn-go-acquire");
+      if (goAcquire) {
+        goAcquire.addEventListener("click", function () {
+          setMode("acquire");
+          setAcqSeg("enqueue");
+        });
+      }
+
+      document.querySelectorAll("[data-acq-seg]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          setAcqSeg(b.getAttribute("data-acq-seg"));
+        });
+      });
+      document.querySelectorAll("[data-source]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          setDownloadSource(b.getAttribute("data-source"));
+        });
+      });
+      document.querySelectorAll("[data-set-group]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          setSettingsGroup(b.getAttribute("data-set-group"));
+        });
+      });
+      var gotoQueue = document.getElementById("btn-goto-queue");
+      if (gotoQueue) {
+        gotoQueue.addEventListener("click", function () {
+          setAcqSeg("queue");
+        });
+      }
+
+      els.search.addEventListener("input", function () {
+        state.query = els.search.value;
+        if (state.mode !== "browse") setMode("browse");
+        renderGrid();
+      });
+      document.querySelectorAll(".sort-group button").forEach(function (b) {
+        b.addEventListener("click", function () {
+          state.sort = b.getAttribute("data-sort");
+          document.querySelectorAll(".sort-group button").forEach(function (x) {
+            x.setAttribute("aria-pressed", x === b ? "true" : "false");
+          });
+          renderGrid();
+        });
+      });
+
+      document.getElementById("btn-new-playlist").addEventListener("click", function () {
+        els.plName.value = "";
+        els.modal.classList.add("open");
+        setTimeout(function () { els.plName.focus(); }, 50);
+      });
+      document.getElementById("modal-cancel").addEventListener("click", function () {
+        els.modal.classList.remove("open");
+      });
+      document.getElementById("modal-confirm").addEventListener("click", function () {
+        var name = els.plName.value.trim();
+        if (!name) {
+          els.plName.focus();
+          return;
+        }
+        var id = "pl" + Date.now();
+        PLAYLISTS.push({ id: id, name: name });
+        els.modal.classList.remove("open");
+        renderRail();
+        selectBrowse({ kind: "playlist", id: id, name: name });
+        toast("已创建「" + name + "」");
+      });
+      els.modal.addEventListener("click", function (e) {
+        if (e.target === els.modal) els.modal.classList.remove("open");
+      });
+
+      document.getElementById("btn-enqueue").addEventListener("click", function () {
+        var lines = els.urls.value.split(/[\n,]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+        if (!lines.length) {
+          toast("请先粘贴至少一个网络链接");
+          return;
+        }
+        var bad = lines.filter(function (l) { return !/^https?:\/\//i.test(l); });
+        if (bad.length) {
+          toast("仅支持 http(s) 网络链接，本地文件请在库页拖入文件夹导入");
+          return;
+        }
+        enqueueUrls(lines, state.downloadSource);
+        els.urls.value = "";
+        setAcqSeg("queue");
+      });
+      document.getElementById("btn-clear-urls").addEventListener("click", function () {
+        els.urls.value = "";
+        els.urls.focus();
+      });
+      if (els.btnRetryFailed) {
+        els.btnRetryFailed.addEventListener("click", function () {
+          var n = 0;
+          state.queue.forEach(function (t) {
+            if (t.status === "failed") {
+              t.status = "downloading";
+              t.error = "";
+              t.bytesPerSec = 1000000;
+              t.etaSec = 50;
+              n++;
+            }
+          });
+          renderQueue();
+          if (n) {
+            startDockForTask(state.queue.find(function (t) { return t.status === "downloading"; }));
+            toast("已重试 " + n + " 个失败任务");
+          }
+        });
+      }
+      if (els.btnClearDone) {
+        els.btnClearDone.addEventListener("click", function () {
+          var before = state.queue.length;
+          state.queue = state.queue.filter(function (t) {
+            return t.status !== "done" && t.status !== "completed";
+          });
+          var removed = before - state.queue.length;
+          renderQueue();
+          toast(removed ? "已清除 " + removed + " 项完成任务" : "没有已完成任务");
+        });
+      }
+
+      document.getElementById("btn-add-sub").addEventListener("click", function () {
+        var url = (els.subUrl.value || "").trim();
+        if (!url) {
+          toast("请输入订阅链接");
+          return;
+        }
+        if (!/^https?:\/\//i.test(url)) {
+          toast("订阅仅支持网络 URL");
+          return;
+        }
+        state.subs.unshift({
+          id: "s" + Date.now(),
+          label: url.replace(/^https?:\/\//, "").slice(0, 28),
+          url: url,
+          enabled: true,
+          last: "尚未检查"
+        });
+        els.subUrl.value = "";
+        renderSubs();
+        toast("已添加订阅");
+      });
+      document.getElementById("btn-check-subs").addEventListener("click", function () {
+        if (!state.subs.length) {
+          toast("暂无订阅");
+          return;
+        }
+        var enq = [];
+        state.subs.forEach(function (s) {
+          if (!s.enabled) return;
+          s.last = "ok · 检查于刚才";
+          if (Math.random() > 0.45) enq.push(s.url);
+        });
+        renderSubs();
+        if (enq.length) {
+          enqueueUrls(enq, "xchina");
+          setAcqSeg("queue");
+          toast("检查完成，入队 " + enq.length + " 条");
+        } else {
+          toast("已检查，无更新");
+        }
+      });
+
+      function bindUrlDrop(el) {
+        if (!el) return;
+        ["dragenter", "dragover"].forEach(function (ev) {
+          el.addEventListener(ev, function (e) {
+            e.preventDefault();
+            el.classList.add("over");
+          });
+        });
+        el.addEventListener("dragleave", function () { el.classList.remove("over"); });
+        el.addEventListener("drop", function (e) {
+          e.preventDefault();
+          el.classList.remove("over");
+          var plain = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "";
+          var urls = plain.split(/[\r\n\s,]+/).map(function (s) { return s.trim(); }).filter(function (s) {
+            return /^https?:\/\//i.test(s);
+          });
+          urls = urls.filter(function (u, i, a) { return a.indexOf(u) === i; });
+          if (!urls.length) {
+            toast("未识别到网络链接");
+            return;
+          }
+          if (state.mode !== "acquire") setMode("acquire");
+          els.urls.value = (els.urls.value.trim() ? els.urls.value.trim() + "\n" : "") + urls.join("\n");
+          toast("已填入 " + urls.length + " 条链接，点击「开始下载」入队");
+        });
+      }
+      bindUrlDrop(els.urlDrop);
+      if (els.urls) {
+        els.urls.addEventListener("dragover", function (e) { e.preventDefault(); });
+        els.urls.addEventListener("drop", function (e) {
+          e.preventDefault();
+          var plain = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "";
+          var urls = plain.split(/[\r\n\s,]+/).map(function (s) { return s.trim(); }).filter(function (s) {
+            return /^https?:\/\//i.test(s);
+          });
+          if (urls.length) {
+            els.urls.value = (els.urls.value.trim() ? els.urls.value.trim() + "\n" : "") + urls.join("\n");
+          }
+        });
+      }
+
+      if (els.browseScroll) {
+        els.browseScroll.addEventListener("dragenter", function (e) {
+          if (state.mode !== "browse") return;
+          e.preventDefault();
+          els.browseDrop.classList.add("show");
+        });
+        els.browseScroll.addEventListener("dragover", function (e) {
+          if (state.mode !== "browse") return;
+          e.preventDefault();
+          els.browseDrop.classList.add("show");
+        });
+        els.browseScroll.addEventListener("dragleave", function (e) {
+          if (e.target === els.browseScroll || e.target === els.browseDrop) {
+            els.browseDrop.classList.remove("show");
+          }
+        });
+        els.browseScroll.addEventListener("drop", function (e) {
+          e.preventDefault();
+          els.browseDrop.classList.remove("show");
+          if (state.mode !== "browse") return;
+          var plain = e.dataTransfer.getData("text/plain") || "";
+          if (/^https?:\/\//i.test(plain.trim())) {
+            toast("网络链接请到「获取」页下载；库页只导入本地文件夹");
+            return;
+          }
+          var name = "导入套图 " + (SETS.length + 1);
+          var id = "g" + Date.now();
+          SETS.unshift({
+            id: id,
+            title: name,
+            author: "本机",
+            coverArt: SETS.length % ARTS.length,
+            type: "静态",
+            size: "—",
+            favorite: false,
+            playlist: [],
+            recent: 99,
+            source: "local",
+            sourceUrl: "file:///imported/" + id,
+            images: makeImages(SETS.length % ARTS.length, 7, SETS.length)
+          });
+          renderRail();
+          renderGrid();
+          toast("已导入本地套图「" + name + "」");
+        });
+      }
+
+      document.getElementById("sw-notify").addEventListener("click", function () {
+        state.notify = !state.notify;
+        this.setAttribute("aria-checked", state.notify ? "true" : "false");
+      });
+      document.getElementById("sw-preview").addEventListener("click", function () {
+        state.hoverPreview = !state.hoverPreview;
+        this.setAttribute("aria-checked", state.hoverPreview ? "true" : "false");
+        renderGrid();
+      });
+      document.getElementById("btn-path").addEventListener("click", function () {
+        var next = window.prompt("下载根目录（网络下载与库存储）", state.downloadPath);
+        if (next && next.trim()) {
+          state.downloadPath = next.trim();
+          var pathInput = document.getElementById("download-path-input");
+          if (pathInput) pathInput.value = state.downloadPath;
+        }
+      });
+      var conc = document.getElementById("set-concurrency");
+      if (conc) {
+        conc.addEventListener("change", function () {
+          var v = Math.max(1, Math.min(8, Number(conc.value) || 2));
+          state.concurrency = v;
+          conc.value = String(v);
+          toast("并发已设为 " + v);
+        });
+      }
+      var themeSel = document.getElementById("set-theme");
+      if (themeSel) {
+        themeSel.addEventListener("change", function () {
+          applyTheme(themeSel.value);
+          toast("外观：" + ({ system: "跟随系统", light: "亮色", dark: "暗色" }[state.theme] || state.theme));
+        });
+      }
+      document.querySelectorAll("#theme-seg [data-theme-val]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          applyTheme(b.getAttribute("data-theme-val"));
+          toast("外观：" + ({ system: "跟随系统", light: "亮色", dark: "暗色" }[state.theme] || state.theme));
+        });
+      });
+      var proxy = document.getElementById("set-proxy");
+      if (proxy) {
+        proxy.addEventListener("blur", function () {
+          state.proxyUrl = proxy.value.trim();
+          toast(state.proxyUrl ? "已保存代理" : "已清除代理（直连）");
+        });
+      }
+      var subH = document.getElementById("set-sub-hours");
+      if (subH) {
+        subH.addEventListener("change", function () {
+          state.subCheckHours = Math.max(0, Math.min(168, Number(subH.value) || 0));
+          toast("订阅检查间隔：" + (state.subCheckHours || "仅手动") + (state.subCheckHours ? " 小时" : ""));
+        });
+      }
+      document.getElementById("btn-rebuild-index").addEventListener("click", function () {
+        toast("索引已重建：" + SETS.length + " 套");
+      });
+      document.getElementById("btn-replay-onboarding").addEventListener("click", function () {
+        toast("演示：将重新打开首次引导");
+      });
+
+      function setTgBadge(label, tone) {
+        var b = document.getElementById("tg-badge");
+        if (!b) return;
+        b.textContent = label;
+        b.className = "status-badge" + (tone ? " " + tone : "");
+      }
+      function tgAction(msg, badge, tone) {
+        toast(msg);
+        if (badge) setTgBadge(badge, tone || "warn");
+      }
+      document.getElementById("tg-connect").addEventListener("click", function () {
+        state.tgState = "connecting";
+        tgAction("正在连接 Telegram session…", "连接中", "warn");
+        setTimeout(function () {
+          state.tgState = "authorized";
+          setTgBadge("已登录", "ok");
+          toast("已连接 Telegram（演示）");
+        }, 700);
+      });
+      document.getElementById("tg-send-code").addEventListener("click", function () {
+        var phone = document.getElementById("tg-phone").value.trim();
+        if (!phone) { toast("请先填写手机号"); return; }
+        state.tgState = "need_code";
+        tgAction("验证码已发送到 " + phone, "等待验证码", "warn");
+      });
+      document.getElementById("tg-submit-code").addEventListener("click", function () {
+        var code = document.getElementById("tg-code").value.trim();
+        if (!code) { toast("请先填写验证码"); return; }
+        state.tgState = "authorized";
+        setTgBadge("已登录", "ok");
+        toast("登录成功（演示）");
+      });
+      document.getElementById("tg-submit-2fa").addEventListener("click", function () {
+        var pw = document.getElementById("tg-password").value;
+        if (!pw) { toast("请填写两步验证密码"); return; }
+        state.tgState = "authorized";
+        setTgBadge("已登录", "ok");
+        toast("2FA 已通过（演示）");
+      });
+      document.getElementById("tg-logout").addEventListener("click", function () {
+        state.tgState = "idle";
+        setTgBadge("未连接", "");
+        toast("已登出 Telegram");
+      });
+
+      document.getElementById("sw-we-auto").addEventListener("click", function () {
+        state.weAutoSync = !state.weAutoSync;
+        this.setAttribute("aria-checked", state.weAutoSync ? "true" : "false");
+        toast(state.weAutoSync ? "已开启自动同步" : "已关闭自动同步");
+      });
+      document.getElementById("btn-we-dir").addEventListener("click", function () {
+        var next = window.prompt("WE 工程目录", state.weDir);
+        if (next && next.trim()) {
+          state.weDir = next.trim();
+          document.getElementById("set-we-dir").value = state.weDir;
+        }
+      });
+      document.getElementById("btn-we-sync").addEventListener("click", function () {
+        var imgs = SETS.reduce(function (n, s) { return n + imageCount(s); }, 0);
+        toast("已同步 " + SETS.length + " 套 / " + imgs + " 张（演示）");
+      });
+      document.getElementById("btn-we-open").addEventListener("click", function () {
+        toast("打开工程目录：" + state.weDir);
+      });
+      document.getElementById("btn-we-startup-on").addEventListener("click", function () {
+        state.weStartup = true;
+        document.getElementById("we-startup-label").textContent =
+          "开机自启：已开启（后台无窗口）。同步会写入工程目录，并覆盖 WE 已导入副本。";
+        toast("已安装开机自启（演示）");
+      });
+      document.getElementById("btn-we-startup-off").addEventListener("click", function () {
+        state.weStartup = false;
+        document.getElementById("we-startup-label").textContent =
+          "开机自启：未开启。同步会写入工程目录，并覆盖 WE 已导入副本。";
+        toast("已卸载开机自启");
+      });
+      var wePort = document.getElementById("set-we-port");
+      if (wePort) {
+        wePort.addEventListener("change", function () {
+          state.wePort = Number(wePort.value) || 19283;
+          toast("媒体端口：" + state.wePort);
+        });
+      }
+
+      document.getElementById("lb-close").addEventListener("click", closeLightbox);
+      els.lbPrev.addEventListener("click", function () { stepLightbox(-1); });
+      els.lbNext.addEventListener("click", function () { stepLightbox(1); });
+      els.lightbox.addEventListener("click", function (e) {
+        if (e.target === els.lightbox) closeLightbox();
+      });
+
+      function openDownloadPage() {
+        setMode("acquire");
+        setAcqSeg("queue");
+      }
+
+      els.dockToggle.addEventListener("click", function () {
+        state.dock.expanded = !state.dock.expanded;
+        renderDock();
+      });
+
+      document.getElementById("dock-open-page").addEventListener("click", function (e) {
+        e.stopPropagation();
+        openDownloadPage();
+      });
+
+      els.dockList.addEventListener("click", function (e) {
+        if (!e.target.closest("[data-dock-task]")) return;
+        openDownloadPage();
+      });
+
+      document.addEventListener("click", function (e) {
+        if (!els.menu.contains(e.target) && !e.target.closest('[data-act="more"]')) closeMenu();
+        if (
+          els.galleryOverflow &&
+          !els.galleryOverflow.contains(e.target) &&
+          !e.target.closest("#gallery-more-btn")
+        ) {
+          closeGalleryOverflow();
+        }
+        if (
+          els.thumbCtx &&
+          els.thumbCtx.classList.contains("open") &&
+          !els.thumbCtx.contains(e.target)
+        ) {
+          closeThumbCtx();
+        }
+      });
+
+      document.addEventListener("keydown", function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          setMode("browse");
+          els.search.focus();
+          els.search.select();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+          e.preventDefault();
+          setMode("settings");
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+          e.preventDefault();
+          setMode("acquire");
+          setAcqSeg("enqueue");
+          setTimeout(function () { els.urls && els.urls.focus(); }, 40);
+        }
+        if (state.lightIndex != null) {
+          if (e.key === "ArrowRight") { e.preventDefault(); stepLightbox(1); return; }
+          if (e.key === "ArrowLeft") { e.preventDefault(); stepLightbox(-1); return; }
+          if (e.key === "Escape") { e.preventDefault(); closeLightbox(); return; }
+        }
+        if (e.key === "Escape") {
+          closeMenu();
+          closeGalleryOverflow();
+          if (els.thumbCtx && els.thumbCtx.classList.contains("open")) {
+            e.preventDefault();
+            closeThumbCtx();
+            return;
+          }
+          if (state.mode === "gallery" && state.gallerySelectMode) {
+            e.preventDefault();
+            state.gallerySelectMode = false;
+            state.gallerySelected = {};
+            renderGallery();
+            return;
+          }
+          if (state.mode === "gallery") {
+            setMode("browse");
+            renderGrid();
+          }
+          els.modal.classList.remove("open");
+        }
+      });
+
+      // 模拟「获取页」网络下载进度（本地库不发起下载）
+      setInterval(function () {
+        if (!state.dock.visible || state.dock.paused) return;
+        var active = state.queue.find(function (t) { return t.status === "downloading"; });
+        if (!active) {
+          var next = state.queue.find(function (t) { return t.status === "queued"; });
+          if (next) {
+            next.status = "downloading";
+            next.bytesPerSec = 1000000 + Math.random() * 900000;
+            startDockForTask(next);
+            if (state.mode === "acquire" && state.acqSeg === "queue") renderQueue();
+            syncAcquireChrome();
+          }
+          return;
+        }
+        var step = (0.9 + Math.random() * 1.4) * 1024 * 1024;
+        active.bytesReceived = Math.min(active.bytesTotal || 1e9, (active.bytesReceived || 0) + step);
+        if (active.total > 0) {
+          var ratio = active.bytesTotal ? active.bytesReceived / active.bytesTotal : 0;
+          active.done = Math.min(active.total, Math.floor(ratio * active.total));
+        }
+        if (active.bytesPerSec > 0 && active.bytesTotal > active.bytesReceived) {
+          active.etaSec = Math.max(1, Math.round((active.bytesTotal - active.bytesReceived) / active.bytesPerSec));
+        }
+        if (active.files && active.files.length) {
+          var cur = active.files.find(function (f) { return f.status === "downloading"; });
+          if (cur && cur.bytesTotal) {
+            cur.bytesReceived = Math.min(cur.bytesTotal, (cur.bytesReceived || 0) + step * 0.4);
+            if (cur.bytesReceived >= cur.bytesTotal) cur.status = "done";
+          }
+        }
+        state.dock.title = active.title;
+        state.dock.done = active.bytesReceived / (1024 * 1024);
+        state.dock.total = Math.max(0.1, (active.bytesTotal || 1) / (1024 * 1024));
+        if (active.bytesReceived >= active.bytesTotal) {
+          active.status = "done";
+          active.done = active.total;
+          active.bytesPerSec = 0;
+          active.etaSec = null;
+          if (state.notify) toast("下载完成：" + active.title);
+          if (!SETS.some(function (s) { return s.title === active.title; })) {
+            SETS.unshift({
+              id: "g" + Date.now() + Math.random().toString(36).slice(2, 5),
+              title: active.title.slice(0, 24),
+              author: sourceLabel(active.source),
+              coverArt: state.dock.art % ARTS.length,
+              type: "静态",
+              size: formatBytes(active.bytesTotal),
+              favorite: false,
+              playlist: [],
+              recent: 100,
+              source: active.source || "xchina",
+              sourceUrl: active.url || "",
+              images: makeImages(state.dock.art % ARTS.length, Math.max(6, active.total || 8), Date.now() % 9)
+            });
+            renderRail();
+            if (state.mode === "browse") renderGrid();
+          }
+          if (state.mode === "acquire" && state.acqSeg === "queue") renderQueue();
+          syncAcquireChrome();
+        } else if (state.mode === "acquire" && state.acqSeg === "queue") {
+          // 轻量刷新进度条：仅更新可见 DOM，避免整表重建闪烁
+          var row = els.queue && els.queue.querySelector('[data-task="' + active.id + '"]');
+          if (row) {
+            var pct = taskPercent(active);
+            var fill = row.querySelector(".progress-fill");
+            if (fill) fill.style.transform = "scaleX(" + pct / 100 + ")";
+            var meta = row.querySelector(".task-meta");
+            if (meta) {
+              var sizeLabel = formatBytes(active.bytesReceived) + "/" + formatBytes(active.bytesTotal);
+              meta.innerHTML =
+                '<span class="st is-run">下载中</span>' +
+                '<span class="mono-num"> · ' + sizeLabel + " · " + pct + "%</span>" +
+                (active.total ? '<span class="mono-num"> · ' + active.done + "/" + active.total + " 文件</span>" : "") +
+                (active.bytesPerSec ? '<span class="mono-num"> · ' + formatSpeed(active.bytesPerSec) + "</span>" : "") +
+                (active.etaSec != null ? '<span class="mono-num"> · ' + formatEta(active.etaSec) + "</span>" : "") +
+                '<span class="mono-num"> · ' + sourceLabel(active.source) + "</span>";
+            }
+          }
+        }
+        renderDock();
+      }, 900);
+
+      applyTheme(state.theme || "dark");
+      setDownloadSource("xchina");
+      renderRail();
+      renderGrid();
+      renderQueue();
+      renderSubs();
+      renderDock();
+      syncAcquireChrome();
+    })();
+  </script>
+</body>
+</html>
