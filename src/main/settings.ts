@@ -46,7 +46,7 @@ function defaultSettings(): AppSettings {
     wallpaperMediaPort: 17989,
     telegramApiId: '',
     telegramApiHash: '',
-    theme: 'system',
+    theme: 'light',
     onboardingDone: false,
     subscriptionCheckHours: 6,
   }

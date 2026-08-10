@@ -28,6 +28,7 @@ export default function SettingsPage(): JSX.Element {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
+  const [group, setGroup] = useState<'general' | 'network' | 'telegram' | 'wallpaper'>('general')
 
   useEffect(() => {
     void api.getSettings().then(setSettings)
@@ -49,7 +50,28 @@ export default function SettingsPage(): JSX.Element {
   return (
     <section className="page settings-page">
       <h2 className="page-title">设置</h2>
-
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="设置分组">
+          {(
+            [
+              ['general', '通用'],
+              ['network', '网络'],
+              ['telegram', 'Telegram'],
+              ['wallpaper', '壁纸'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={group === id ? 'settings-nav-btn active' : 'settings-nav-btn'}
+              onClick={() => setGroup(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="settings-body">
+          {group === 'general' ? (
       <section className="settings-section">
         <h3 className="settings-section-title">通用</h3>
         <label className="field">
@@ -123,7 +145,9 @@ export default function SettingsPage(): JSX.Element {
           </button>
         </div>
       </section>
+          ) : null}
 
+          {group === 'network' ? (
       <section className="settings-section">
         <h3 className="settings-section-title">网络</h3>
         <label className="field">
@@ -156,7 +180,9 @@ export default function SettingsPage(): JSX.Element {
           />
         </label>
       </section>
+          ) : null}
 
+          {group === 'telegram' ? (
       <section className="settings-section">
         <div className="settings-section-head">
           <h3 className="settings-section-title">Telegram</h3>
@@ -326,7 +352,9 @@ export default function SettingsPage(): JSX.Element {
           </button>
         </div>
       </section>
+          ) : null}
 
+          {group === 'wallpaper' ? (
       <section className="settings-section">
         <h3 className="settings-section-title">Wallpaper</h3>
         <p className="muted field-hint">
@@ -425,6 +453,9 @@ export default function SettingsPage(): JSX.Element {
           </button>
         </div>
       </section>
+          ) : null}
+        </div>
+      </div>
     </section>
   )
 }

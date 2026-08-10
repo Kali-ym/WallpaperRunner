@@ -1,5 +1,6 @@
 export type LibraryFilters = {
   tags?: string[]
+  authors?: string[]
   sources?: string[]
   favoriteOnly?: boolean
   downloadedFrom?: string
@@ -9,6 +10,7 @@ export type LibraryFilters = {
 }
 
 export type TagStat = { tag: string; count: number }
+export type AuthorStat = { author: string; count: number }
 
 /** Parse YYYY-MM-DD or ISO into ms. `endOfDay` expands date-only to 23:59:59.999Z. */
 export function boundToMs(raw: string | undefined, endOfDay: boolean): number | null {
@@ -78,6 +80,11 @@ export function applyLibraryFilters(
     })
   }
 
+  if (opts?.authors && opts.authors.length > 0) {
+    const needed = opts.authors.map((a) => a.trim().toLowerCase()).filter(Boolean)
+    list = list.filter((e) => needed.includes((e.author || '').trim().toLowerCase()))
+  }
+
   const fromMs = boundToMs(opts?.downloadedFrom, false)
   const toMs = boundToMs(opts?.downloadedTo, true)
   if (fromMs != null || toMs != null) {
@@ -119,6 +126,21 @@ export function aggregateTagStats(entries: FilterableEntry[]): TagStat[] {
   return [...map.values()].sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count
     return a.tag.localeCompare(b.tag)
+  })
+}
+
+export function aggregateAuthorStats(entries: FilterableEntry[]): AuthorStat[] {
+  const map = new Map<string, { author: string; count: number }>()
+  for (const e of entries) {
+    const author = (e.author || '').trim() || '未知作者'
+    const key = author.toLowerCase()
+    const cur = map.get(key)
+    if (cur) cur.count += 1
+    else map.set(key, { author, count: 1 })
+  }
+  return [...map.values()].sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count
+    return a.author.localeCompare(b.author, 'zh-CN')
   })
 }
 

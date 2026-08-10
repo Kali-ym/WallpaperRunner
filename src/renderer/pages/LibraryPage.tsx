@@ -14,6 +14,7 @@ import ContextMenu from '../components/ContextMenu'
 import EditMetadataModal from '../components/EditMetadataModal'
 import JoinPlaylistModal from '../components/JoinPlaylistModal'
 import BatchTagModal from '../components/BatchTagModal'
+import type { BrowseSelection } from '../components/CollectionRail'
 import { useToast } from '../lib/toast'
 import {
   api,
@@ -25,6 +26,10 @@ import {
 
 interface Props {
   onOpenGallery: (entry: LibraryIndexEntry) => void
+  browseSelection?: BrowseSelection
+  query?: string
+  onQueryChange?: (q: string) => void
+  hideSearch?: boolean
 }
 
 type LibraryView = 'grid-comfy' | 'grid-compact' | 'grid-large' | 'list'
@@ -50,18 +55,27 @@ function hasActiveFilters(f: LibraryFilters, query: string): boolean {
   if (query.trim()) return true
   if (f.favoriteOnly) return true
   if (f.tags && f.tags.length > 0) return true
+  if (f.authors && f.authors.length > 0) return true
   if (f.sources && f.sources.length > 0) return true
   if (f.downloadedFrom || f.downloadedTo) return true
   if (f.minImages != null || f.maxImages != null) return true
   return false
 }
 
-export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
+export default function LibraryPage({
+  onOpenGallery,
+  browseSelection = { kind: 'all' },
+  query: queryProp,
+  onQueryChange,
+  hideSearch,
+}: Props): JSX.Element {
   const toast = useToast()
-  const [query, setQuery] = useState('')
+  const [queryLocal, setQueryLocal] = useState('')
+  const query = queryProp ?? queryLocal
+  const setQuery = onQueryChange ?? setQueryLocal
   const [filters, setFilters] = useState<LibraryFilters>({})
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [tagStats, setTagStats] = useState<TagStat[]>([])
-  const [tagsOpen, setTagsOpen] = useState(true)
   const [view, setView] = useState<LibraryView>(() => readView())
   const [items, setItems] = useState<LibraryIndexEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,14 +115,28 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   const reload = useCallback(
     (opts?: { silent?: boolean }) => {
       if (!opts?.silent) setLoading(true)
+      const effective: LibraryFilters = { ...filters }
+      if (browseSelection.kind === 'favorite') effective.favoriteOnly = true
+      if (browseSelection.kind === 'author') effective.authors = [browseSelection.author]
+      if (browseSelection.kind === 'all' || browseSelection.kind === 'playlist') {
+        // keep filters; playlist filtered after fetch
+      }
+
       void Promise.all([
-        api.listLibrary(query, filters),
+        api.listLibrary(query, effective),
         api.tagStats(),
         api.getHistory(),
         api.listLibrary(''),
+        browseSelection.kind === 'playlist' ? api.listPlaylists() : Promise.resolve(null),
       ])
-        .then(([list, stats, hist, all]) => {
-          setItems(list)
+        .then(([list, stats, hist, all, pls]) => {
+          let next = list
+          if (browseSelection.kind === 'playlist' && pls) {
+            const pl = pls.find((p) => p.id === browseSelection.id)
+            const keys = new Set((pl?.galleryRefs ?? []).map((r) => `${r.source}:${r.galleryId}`))
+            next = list.filter((e) => keys.has(keyOf(e)))
+          }
+          setItems(next)
           setTagStats(stats)
           setRecentBrowse(hist.browsed.slice(0, 8))
           setRecentSearches(hist.searches.slice(0, 8))
@@ -124,7 +152,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           toast.error(err instanceof Error ? err.message : String(err))
         })
     },
-    [query, filters, toast],
+    [query, filters, toast, browseSelection],
   )
 
   useEffect(() => {
@@ -379,7 +407,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
       onDrop={(e) => void handleFolderDrop(e)}
     >
       {folderDragOver ? <p className="drop-hint">松开以导入本地文件夹</p> : null}
-      {(recentBrowse.length > 0 || recentDownloaded.length > 0) && (
+      {(recentBrowse.length > 0 || recentDownloaded.length > 0 || recentSearches.length > 0) && (
         <div className="recent-strip">
           {recentBrowse.length > 0 ? (
             <div className="recent-row">
@@ -419,110 +447,36 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
               </div>
             </div>
           ) : null}
+          {recentSearches.length > 0 ? (
+            <div className="recent-row">
+              <span className="muted recent-label">最近搜索</span>
+              <div className="recent-chips">
+                {recentSearches.map((s) => (
+                  <button key={s} type="button" className="chip tiny" onClick={() => setQuery(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
-      <div className="page-toolbar wrap">
-        <input
-          className="search-input"
-          data-focus="library-search"
-          placeholder="搜索标题 / 标签 / 模特"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {recentSearches.length > 0 ? (
-          <div className="recent-chips search-history">
-            {recentSearches.map((s) => (
-              <button key={s} type="button" className="chip tiny" onClick={() => setQuery(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
+      <div className="page-toolbar wrap browse-toolbar">
+        {!hideSearch ? (
+          <input
+            className="search-input"
+            data-focus="library-search"
+            placeholder="搜索标题 / 作者 / 标签"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         ) : null}
-        <div className="filter-chips" role="group" aria-label="来源">
-          {SOURCE_OPTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`chip ${(filters.sources ?? []).includes(s) ? 'active' : ''}`}
-              onClick={() => toggleSource(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <label className="inline-check">
-          <input
-            type="checkbox"
-            checked={Boolean(filters.favoriteOnly)}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                favoriteOnly: e.target.checked ? true : undefined,
-              }))
-            }
-          />
-          仅收藏
-        </label>
-        <label className="field-inline">
-          <span className="muted">从</span>
-          <input
-            type="date"
-            className="text-input narrow-date"
-            value={filters.downloadedFrom ?? ''}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                downloadedFrom: e.target.value || undefined,
-              }))
-            }
-          />
-        </label>
-        <label className="field-inline">
-          <span className="muted">到</span>
-          <input
-            type="date"
-            className="text-input narrow-date"
-            value={filters.downloadedTo ?? ''}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                downloadedTo: e.target.value || undefined,
-              }))
-            }
-          />
-        </label>
-        <label className="field-inline">
-          <span className="muted">张数</span>
-          <input
-            type="number"
-            className="text-input narrow"
-            min={0}
-            placeholder="min"
-            value={filters.minImages ?? ''}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                minImages: e.target.value === '' ? undefined : Number(e.target.value),
-              }))
-            }
-          />
-          <span className="muted">–</span>
-          <input
-            type="number"
-            className="text-input narrow"
-            min={0}
-            placeholder="max"
-            value={filters.maxImages ?? ''}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                maxImages: e.target.value === '' ? undefined : Number(e.target.value),
-              }))
-            }
-          />
-        </label>
-        <button type="button" className="btn" onClick={clearFilters}>
-          清除筛选
+        <button
+          type="button"
+          className={`btn${filtersOpen ? ' primary' : ''}`}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          筛选{filtering && !filtersOpen ? ' ·' : ''}
         </button>
         <button type="button" className="btn" disabled={dupBusy} onClick={() => void runFindDuplicates()}>
           {dupBusy ? '查重中…' : '查找重复'}
@@ -551,8 +505,117 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
         </div>
         <span className="muted">
           {loading ? '加载中…' : `${items.length} 部套图${filtering ? '（已筛选）' : ''}`}
+          {browseSelection.kind === 'author' ? ` · ${browseSelection.author}` : ''}
+          {browseSelection.kind === 'playlist' ? ` · ${browseSelection.name}` : ''}
         </span>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-panel">
+          <div className="filter-chips" role="group" aria-label="来源">
+            {SOURCE_OPTIONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`chip ${(filters.sources ?? []).includes(s) ? 'active' : ''}`}
+                onClick={() => toggleSource(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          {browseSelection.kind !== 'favorite' ? (
+            <label className="inline-check">
+              <input
+                type="checkbox"
+                checked={Boolean(filters.favoriteOnly)}
+                onChange={(e) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    favoriteOnly: e.target.checked ? true : undefined,
+                  }))
+                }
+              />
+              仅收藏
+            </label>
+          ) : null}
+          <label className="field-inline">
+            <span className="muted">从</span>
+            <input
+              type="date"
+              className="text-input narrow-date"
+              value={filters.downloadedFrom ?? ''}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  downloadedFrom: e.target.value || undefined,
+                }))
+              }
+            />
+          </label>
+          <label className="field-inline">
+            <span className="muted">到</span>
+            <input
+              type="date"
+              className="text-input narrow-date"
+              value={filters.downloadedTo ?? ''}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  downloadedTo: e.target.value || undefined,
+                }))
+              }
+            />
+          </label>
+          <label className="field-inline">
+            <span className="muted">张数</span>
+            <input
+              type="number"
+              className="text-input narrow"
+              min={0}
+              placeholder="min"
+              value={filters.minImages ?? ''}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  minImages: e.target.value === '' ? undefined : Number(e.target.value),
+                }))
+              }
+            />
+            <span className="muted">–</span>
+            <input
+              type="number"
+              className="text-input narrow"
+              min={0}
+              placeholder="max"
+              value={filters.maxImages ?? ''}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  maxImages: e.target.value === '' ? undefined : Number(e.target.value),
+                }))
+              }
+            />
+          </label>
+          {tagStats.length > 0 ? (
+            <div className="filter-chips" role="group" aria-label="标签（可选）">
+              {tagStats.slice(0, 12).map((s) => (
+                <button
+                  key={s.tag}
+                  type="button"
+                  className={`chip tiny ${(filters.tags ?? []).includes(s.tag) ? 'active' : ''}`}
+                  onClick={() => toggleTag(s.tag)}
+                >
+                  {s.tag}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <button type="button" className="btn" onClick={clearFilters}>
+            清除筛选
+          </button>
+        </div>
+      ) : null}
 
       {selectMode ? (
         <div className="page-toolbar batch-bar">
@@ -629,53 +692,11 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
         </div>
       ) : null}
 
-      <div className={`library-layout ${tagsOpen ? 'with-tags' : ''}`}>
-        <aside className={`tag-sidebar ${tagsOpen ? '' : 'collapsed'}`}>
-          <div className="tag-sidebar-head">
-            <strong>标签</strong>
-            <button type="button" className="btn" onClick={() => setTagsOpen((v) => !v)}>
-              {tagsOpen ? '收起' : '展开'}
-            </button>
-          </div>
-          {tagsOpen ? (
-            <>
-              {(filters.tags ?? []).length > 0 ? (
-                <div className="filter-chips">
-                  {(filters.tags ?? []).map((t) => (
-                    <button key={t} type="button" className="chip active" onClick={() => toggleTag(t)}>
-                      {t} ×
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <ul className="tag-stat-list">
-                {tagStats.map((s) => {
-                  const on = (filters.tags ?? []).some(
-                    (t) => t.toLowerCase() === s.tag.toLowerCase(),
-                  )
-                  return (
-                    <li key={s.tag}>
-                      <button
-                        type="button"
-                        className={`tag-stat-btn ${on ? 'active' : ''}`}
-                        onClick={() => toggleTag(s.tag)}
-                      >
-                        <span>{s.tag}</span>
-                        <span className="muted">{s.count}</span>
-                      </button>
-                    </li>
-                  )
-                })}
-                {tagStats.length === 0 ? <li className="muted">暂无标签</li> : null}
-              </ul>
-            </>
-          ) : null}
-        </aside>
-
+      <div className="library-layout">
         <div className="library-main">
           {items.length === 0 && !loading ? (
             <div className="empty-state">
-              {filtering ? (
+              {filtering || browseSelection.kind !== 'all' ? (
                 <>
                   <p className="empty-hint">没有符合条件的套图</p>
                   <button type="button" className="btn primary" onClick={clearFilters}>
@@ -692,7 +713,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                       window.dispatchEvent(new CustomEvent('wallpaper-runner:go-download'))
                     }
                   >
-                    去下载
+                    去获取
                   </button>
                 </>
               )}
@@ -745,14 +766,20 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
               )}
             />
           )}
-          {showDups ? (
-            <div className="dup-panel">
-              <div className="dup-panel-head">
-                <h3 className="page-subtitle">重复套图</h3>
-                <button type="button" className="btn tiny" onClick={() => setShowDups(false)}>
-                  关闭
-                </button>
-              </div>
+        </div>
+      </div>
+
+      {showDups ? (
+        <div className="modal-root dup-drawer" role="dialog" aria-label="重复套图">
+          <div className="drawer-backdrop" onClick={() => setShowDups(false)} />
+          <div className="drawer-panel dup-drawer-panel">
+            <div className="drawer-header">
+              <h3>重复套图</h3>
+              <button type="button" className="btn tiny" onClick={() => setShowDups(false)}>
+                关闭
+              </button>
+            </div>
+            <div className="drawer-body">
               {dupGroups.length === 0 ? (
                 <p className="muted">未发现重复（按首图内容指纹）</p>
               ) : (
@@ -767,7 +794,10 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                           key={keyOf(e)}
                           type="button"
                           className="chip"
-                          onClick={() => onOpenGallery(e)}
+                          onClick={() => {
+                            setShowDups(false)
+                            onOpenGallery(e)
+                          }}
                         >
                           {e.displayTitle || e.title}
                           <span className="muted"> · {e.source}</span>
@@ -778,9 +808,9 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                 ))
               )}
             </div>
-          ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {menu ? (
         <ContextMenu

@@ -39,6 +39,7 @@ function extractUrlsFromDrop(e: DragEvent): string[] {
 
 export default function DownloadPage(): JSX.Element {
   const toast = useToast()
+  const [segment, setSegment] = useState<'enqueue' | 'queue' | 'subs'>('enqueue')
   const [source, setSource] = useState<DownloadSource>('xchina')
   const [text, setText] = useState('')
   const [tasks, setTasks] = useState<QueueTask[]>([])
@@ -67,6 +68,9 @@ export default function DownloadPage(): JSX.Element {
   const [subBusy, setSubBusy] = useState(false)
 
   const failedCount = tasks.filter((t) => t.status === 'failed').length
+  const activeCount = tasks.filter((t) =>
+    ['queued', 'resolving', 'downloading', 'paused'].includes(t.status),
+  ).length
 
   useEffect(() => {
     void api.listTasks().then(setTasks)
@@ -199,7 +203,7 @@ export default function DownloadPage(): JSX.Element {
         })
       }
       setAskExtract(null)
-      toast.success('已解压入库，可在「库」中查看')
+      toast.success('已解压入库，可在浏览中查看')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setExtractError(msg)
@@ -225,189 +229,242 @@ export default function DownloadPage(): JSX.Element {
       }}
       onDrop={(e) => void handleUrlDrop(e)}
     >
-      <h2 className="page-title">下载</h2>
-      <p className="muted field-hint">
-        先选择来源，再粘贴或拖入对应链接。Telegram / Telegraph 解析后在右侧抽屉勾选资源。
-      </p>
-
-      <div className="source-seg" role="tablist" aria-label="下载来源">
-        {SOURCES.map((s) => (
+      <h2 className="page-title">获取</h2>
+      <div className="segment-tabs" role="tablist" aria-label="获取分段">
+        {(
+          [
+            ['enqueue', '入队'],
+            ['queue', `队列${activeCount > 0 ? ` (${activeCount})` : ''}`],
+            ['subs', `订阅${subs.length > 0 ? ` (${subs.length})` : ''}`],
+          ] as const
+        ).map(([id, label]) => (
           <button
-            key={s.id}
+            key={id}
             type="button"
             role="tab"
-            aria-selected={source === s.id}
-            className={source === s.id ? 'source-seg-btn active' : 'source-seg-btn'}
-            onClick={() => {
-              setSource(s.id)
-              setError('')
-            }}
+            aria-selected={segment === id}
+            className={segment === id ? 'segment-tab active' : 'segment-tab'}
+            onClick={() => setSegment(id)}
           >
-            {s.label}
+            {label}
           </button>
         ))}
       </div>
 
-      <textarea
-        className="url-box"
-        data-focus="download-urls"
-        rows={5}
-        placeholder={
-          source === 'xchina'
-            ? 'https://xchina.co/photo/id-xxxxxxxx.html\n也可直接拖入链接'
-            : source === 'telegram'
-              ? 'https://t.me/channel/123\n可粘贴多条，合并为一套图'
-              : 'https://telegra.ph/Article-01-01'
-        }
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+      {segment === 'enqueue' ? (
+        <>
+          <p className="muted field-hint">
+            先选择来源，再粘贴或拖入对应链接。Telegram / Telegraph 解析后在右侧抽屉勾选资源。
+          </p>
 
-      <div className="page-toolbar">
-        <button type="button" className="btn primary" disabled={busy} onClick={() => void parseUrls()}>
-          {source === 'xchina' ? '开始下载' : '解析资源'}
-        </button>
-        {failedCount > 0 ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() => {
-              void api.retryAllFailed().then((n) => {
-                toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
-              })
-            }}
-          >
-            重试全部失败（{failedCount}）
-          </button>
-        ) : null}
-      </div>
-      {error ? <p className="error-text">{error}</p> : null}
-      {dragOver ? <p className="drop-hint">松开以加入下载</p> : null}
+          <div className="source-seg" role="tablist" aria-label="下载来源">
+            {SOURCES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={source === s.id}
+                className={source === s.id ? 'source-seg-btn active' : 'source-seg-btn'}
+                onClick={() => {
+                  setSource(s.id)
+                  setError('')
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
 
-      <h3 className="page-subtitle">订阅</h3>
-      <p className="muted field-hint">
-        收藏套图 URL，检查更新时若有新图将自动入队（Telegram/Telegraph 需勾选的来源会跳过）。
-      </p>
-      <div className="page-toolbar wrap">
-        <input
-          className="text-input"
-          placeholder="https://xchina.co/photo/id-….html"
-          value={subUrl}
-          onChange={(e) => setSubUrl(e.target.value)}
-        />
-        <button
-          type="button"
-          className="btn"
-          disabled={subBusy || !subUrl.trim()}
-          onClick={() => {
-            void (async () => {
-              setSubBusy(true)
-              try {
-                await api.addSubscription(subUrl.trim())
-                setSubUrl('')
-                setSubs(await api.listSubscriptions())
-                toast.success('已添加订阅')
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : String(err))
-              } finally {
-                setSubBusy(false)
-              }
-            })()
-          }}
-        >
-          添加
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          disabled={subBusy || subs.length === 0}
-          onClick={() => {
-            void (async () => {
-              setSubBusy(true)
-              try {
-                const r = await api.checkSubscriptions()
-                setSubs(r.subscriptions)
-                toast.success(
-                  r.enqueued > 0
-                    ? `检查 ${r.checked} 条，入队 ${r.enqueued} 条`
-                    : `已检查 ${r.checked} 条，无更新`,
-                )
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : String(err))
-              } finally {
-                setSubBusy(false)
-              }
-            })()
-          }}
-        >
-          {subBusy ? '检查中…' : '立即检查'}
-        </button>
-      </div>
-      {subs.length === 0 ? (
-        <p className="empty-hint">暂无订阅</p>
-      ) : (
-        <ul className="sub-list">
-          {subs.map((s) => (
-            <li key={s.id} className="sub-item">
-              <label className="inline-check">
-                <input
-                  type="checkbox"
-                  checked={s.enabled}
-                  onChange={(e) => {
-                    void api.setSubscriptionEnabled(s.id, e.target.checked).then(async () => {
-                      setSubs(await api.listSubscriptions())
-                    })
-                  }}
-                />
-                <span>
-                  <strong>{s.label}</strong>
-                  <span className="muted"> · {s.url}</span>
-                </span>
-              </label>
-              <div className="sub-meta muted">
-                {s.lastStatus ? (
-                  <span>
-                    {s.lastStatus}
-                    {s.lastImageCount != null ? ` · ${s.lastImageCount} 张` : ''}
-                    {s.lastError ? ` · ${s.lastError}` : ''}
-                  </span>
-                ) : (
-                  <span>尚未检查</span>
-                )}
-                <button
-                  type="button"
-                  className="btn tiny"
-                  onClick={() => {
-                    void api.removeSubscription(s.id).then(async () => {
-                      setSubs(await api.listSubscriptions())
-                    })
-                  }}
-                >
-                  删除
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="page-subtitle">队列</h3>
-      <ul className="task-list">
-        {tasks.map((t) => (
-          <QueueTaskRow
-            key={t.id}
-            task={t}
-            onCancel={(id) => void api.cancelTask(id)}
-            onPause={(id) => void api.pauseTask(id)}
-            onResume={(id) => void api.resumeTask(id)}
-            onMove={(id, dir) => void api.moveTask(id, dir)}
-            onRetry={(id) => void api.retryTask(id)}
+          <textarea
+            className="url-box"
+            data-focus="download-urls"
+            rows={5}
+            placeholder={
+              source === 'xchina'
+                ? 'https://xchina.co/photo/id-xxxxxxxx.html\n也可直接拖入链接'
+                : source === 'telegram'
+                  ? 'https://t.me/channel/123\n可粘贴多条，合并为一套图'
+                  : 'https://telegra.ph/Article-01-01'
+            }
+            value={text}
+            onChange={(e) => setText(e.target.value)}
           />
-        ))}
-      </ul>
-      {tasks.length === 0 ? (
-        <p className="empty-hint">队列为空。选择来源并粘贴或拖入链接开始下载。</p>
+
+          <div className="page-toolbar">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy}
+              onClick={() => void parseUrls()}
+            >
+              {source === 'xchina' ? '开始下载' : '解析资源'}
+            </button>
+            {failedCount > 0 ? (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  setSegment('queue')
+                  void api.retryAllFailed().then((n) => {
+                    toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
+                  })
+                }}
+              >
+                重试全部失败（{failedCount}）
+              </button>
+            ) : null}
+          </div>
+          {error ? <p className="error-text">{error}</p> : null}
+          {dragOver ? <p className="drop-hint">松开以加入下载</p> : null}
+        </>
+      ) : null}
+
+      {segment === 'subs' ? (
+        <>
+          <p className="muted field-hint">
+            收藏套图 URL，检查更新时若有新图将自动入队（Telegram/Telegraph 需勾选的来源会跳过）。
+          </p>
+          <div className="page-toolbar wrap">
+            <input
+              className="text-input"
+              placeholder="https://xchina.co/photo/id-….html"
+              value={subUrl}
+              onChange={(e) => setSubUrl(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn"
+              disabled={subBusy || !subUrl.trim()}
+              onClick={() => {
+                void (async () => {
+                  setSubBusy(true)
+                  try {
+                    await api.addSubscription(subUrl.trim())
+                    setSubUrl('')
+                    setSubs(await api.listSubscriptions())
+                    toast.success('已添加订阅')
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : String(err))
+                  } finally {
+                    setSubBusy(false)
+                  }
+                })()
+              }}
+            >
+              添加
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={subBusy || subs.length === 0}
+              onClick={() => {
+                void (async () => {
+                  setSubBusy(true)
+                  try {
+                    const r = await api.checkSubscriptions()
+                    setSubs(r.subscriptions)
+                    toast.success(
+                      r.enqueued > 0
+                        ? `检查 ${r.checked} 条，入队 ${r.enqueued} 条`
+                        : `已检查 ${r.checked} 条，无更新`,
+                    )
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : String(err))
+                  } finally {
+                    setSubBusy(false)
+                  }
+                })()
+              }}
+            >
+              {subBusy ? '检查中…' : '立即检查'}
+            </button>
+          </div>
+          {subs.length === 0 ? (
+            <p className="empty-hint">暂无订阅</p>
+          ) : (
+            <ul className="sub-list">
+              {subs.map((s) => (
+                <li key={s.id} className="sub-item">
+                  <label className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={s.enabled}
+                      onChange={(e) => {
+                        void api.setSubscriptionEnabled(s.id, e.target.checked).then(async () => {
+                          setSubs(await api.listSubscriptions())
+                        })
+                      }}
+                    />
+                    <span>
+                      <strong>{s.label}</strong>
+                      <span className="muted"> · {s.url}</span>
+                    </span>
+                  </label>
+                  <div className="sub-meta muted">
+                    {s.lastStatus ? (
+                      <span>
+                        {s.lastStatus}
+                        {s.lastImageCount != null ? ` · ${s.lastImageCount} 张` : ''}
+                        {s.lastError ? ` · ${s.lastError}` : ''}
+                      </span>
+                    ) : (
+                      <span>尚未检查</span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn tiny"
+                      onClick={() => {
+                        void api.removeSubscription(s.id).then(async () => {
+                          setSubs(await api.listSubscriptions())
+                        })
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+
+      {segment === 'queue' ? (
+        <>
+          {failedCount > 0 ? (
+            <div className="page-toolbar">
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  void api.retryAllFailed().then((n) => {
+                    toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
+                  })
+                }}
+              >
+                重试全部失败（{failedCount}）
+              </button>
+            </div>
+          ) : null}
+          <ul className="task-list">
+            {tasks.map((t) => (
+              <QueueTaskRow
+                key={t.id}
+                task={t}
+                onCancel={(id) => void api.cancelTask(id)}
+                onPause={(id) => void api.pauseTask(id)}
+                onResume={(id) => void api.resumeTask(id)}
+                onMove={(id, dir) => void api.moveTask(id, dir)}
+                onRetry={(id) => void api.retryTask(id)}
+              />
+            ))}
+          </ul>
+          {tasks.length === 0 ? (
+            <p className="empty-hint">队列为空。切换到「入队」粘贴或拖入链接开始下载。</p>
+          ) : null}
+        </>
       ) : null}
 
       {manifest ? (

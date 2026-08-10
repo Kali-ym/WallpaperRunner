@@ -1,4 +1,4 @@
-import { memo, type JSX } from 'react'
+import { memo, useState, type JSX } from 'react'
 import type { LibraryIndexEntry } from '../lib/api'
 import { api } from '../lib/api'
 
@@ -23,6 +23,9 @@ function GalleryCard({
   onToggleSelect,
   onToggleFavorite,
 }: Props): JSX.Element {
+  const [hover, setHover] = useState(false)
+  const [previewReady, setPreviewReady] = useState(false)
+
   const cover = entry.cover
     ? api.getMediaUrl(entry.dirName, entry.cover, {
         thumb: true,
@@ -30,8 +33,21 @@ function GalleryCard({
       })
     : undefined
 
+  const preview = entry.cover
+    ? api.getMediaUrl(entry.dirName, entry.cover, {
+        bust: entry.downloadedAt,
+      })
+    : undefined
+
   return (
-    <div className={`gallery-card ${selected ? 'selected' : ''}`}>
+    <div
+      className={`gallery-card ${selected ? 'selected' : ''}`}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => {
+        setHover(false)
+        setPreviewReady(false)
+      }}
+    >
       {selectMode ? (
         <label className="card-check">
           <input
@@ -59,13 +75,24 @@ function GalleryCard({
           ) : (
             <div className="cover-empty">无封面</div>
           )}
+          {hover && preview ? (
+            <img
+              className={`gallery-card-preview${previewReady ? ' is-ready' : ''}`}
+              src={preview}
+              alt=""
+              decoding="async"
+              onLoad={() => setPreviewReady(true)}
+            />
+          ) : null}
         </div>
         <div className="gallery-card-body">
           <h3>{labelOf(entry)}</h3>
           <p className="muted">
             {entry.author || '未知作者'} · {entry.imageCount} 张
           </p>
-          <p className="tags">{entry.tags.slice(0, 4).join(' / ')}</p>
+          {entry.tags.length > 0 ? (
+            <p className="tags muted">{entry.tags.slice(0, 3).join(' · ')}</p>
+          ) : null}
         </div>
       </button>
     </div>

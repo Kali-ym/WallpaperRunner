@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   applyLibraryFilters,
+  aggregateAuthorStats,
   aggregateTagStats,
   mergeTags,
   normalizeImageRange,
@@ -58,6 +59,20 @@ describe('library filters helpers', () => {
     ])
     expect(stats[0]).toEqual({ tag: 'JK', count: 2 })
     expect(mergeTags(['JK'], ['jk', '街拍'])).toEqual(['JK', '街拍'])
+  })
+
+  it('filters by authors and aggregates author stats', () => {
+    const entries = [
+      base({ title: '1', author: 'Alice' }),
+      base({ title: '2', author: 'alice' }),
+      base({ title: '3', author: 'Bob' }),
+      base({ title: '4', author: '' }),
+    ]
+    const filtered = applyLibraryFilters(entries, '', { authors: ['Alice'] })
+    expect(filtered.map((e) => e.title)).toEqual(['1', '2'])
+    const stats = aggregateAuthorStats(entries)
+    expect(stats.find((s) => s.author === 'Alice')?.count).toBe(2)
+    expect(stats.find((s) => s.author === '未知作者')?.count).toBe(1)
   })
 })
 

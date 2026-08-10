@@ -360,6 +360,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:tagStats', async () => store.listTagStats())
 
+  ipcMain.handle('library:authorStats', async () => store.listAuthorStats())
+
   ipcMain.handle(
     'library:addTags',
     async (_e, refs: Array<{ source: string; galleryId: string }>, tags: string[]) => {

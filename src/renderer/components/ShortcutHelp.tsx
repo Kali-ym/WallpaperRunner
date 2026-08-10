@@ -1,11 +1,11 @@
 import type { JSX } from 'react'
 
 const SHORTCUTS: Array<{ keys: string; desc: string }> = [
-  { keys: 'Ctrl+1…4', desc: '切换 库 / 播放列表 / 下载 / 设置' },
-  { keys: 'Ctrl+K', desc: '聚焦库搜索' },
-  { keys: 'Ctrl+N', desc: '新建下载（聚焦 URL 输入）' },
+  { keys: 'Ctrl+K', desc: '聚焦顶栏搜索' },
+  { keys: 'Ctrl+N', desc: '打开获取并聚焦链接输入' },
+  { keys: 'Ctrl+,', desc: '打开设置' },
   { keys: '?', desc: '打开本帮助' },
-  { keys: 'Esc', desc: '关闭帮助 / 关闭套图详情' },
+  { keys: 'Esc', desc: '关闭帮助 / 返回浏览 / 关闭套图详情' },
 ]
 
 interface Props {

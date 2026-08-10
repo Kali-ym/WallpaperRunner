@@ -4,14 +4,16 @@ import { join } from 'node:path'
 import { galleryFolderName } from './paths'
 import {
   aggregateTagStats,
+  aggregateAuthorStats,
   applyLibraryFilters,
   mergeTags,
   type LibraryFilters,
   type TagStat,
+  type AuthorStat,
 } from './filters'
 import { fingerprintFile, groupDuplicatesByFingerprint } from './fingerprint'
 
-export type { LibraryFilters, TagStat } from './filters'
+export type { LibraryFilters, TagStat, AuthorStat } from './filters'
 
 export interface GalleryMetadata {
   source: string
@@ -208,6 +210,11 @@ export class LibraryStore extends EventEmitter {
   async listTagStats(): Promise<TagStat[]> {
     const entries = await this.loadIndex()
     return aggregateTagStats(entries)
+  }
+
+  async listAuthorStats(): Promise<AuthorStat[]> {
+    const entries = await this.loadIndex()
+    return aggregateAuthorStats(entries)
   }
 
   async addTags(refs: GalleryRef[], tags: string[]): Promise<number> {
