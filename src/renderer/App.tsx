@@ -85,6 +85,15 @@ function AppShell(): JSX.Element {
   }, [toast])
 
   useEffect(() => {
+    function onGoDownload(): void {
+      setActive(null)
+      setTab('download')
+    }
+    window.addEventListener('wallpaper-runner:go-download', onGoDownload)
+    return () => window.removeEventListener('wallpaper-runner:go-download', onGoDownload)
+  }, [])
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (document.querySelector('.yarl__root')) return
       if (isTypingTarget(e.target) && e.key !== 'Escape') return

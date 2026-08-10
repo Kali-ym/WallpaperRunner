@@ -240,6 +240,7 @@ export function registerIpc(): void {
 
   ipcMain.handle('settings:set', async (_e, partial: Partial<AppSettings>) => {
     const prevDir = settings.wallpaperEngineDir
+    const prevPort = settings.wallpaperMediaPort
     settings = await saveSettings(partial)
     await applyNetwork(settings.proxyUrl)
     bindLibraryStore(new LibraryStore(settings.downloadRoot))
@@ -253,6 +254,9 @@ export function registerIpc(): void {
         settings.wallpaperEngineDir !== prevDir)
     ) {
       scheduleWallpaperSync(true)
+    }
+    if (partial.wallpaperMediaPort !== undefined && settings.wallpaperMediaPort !== prevPort) {
+      await ensureMediaServer()
     }
     return settings
   })

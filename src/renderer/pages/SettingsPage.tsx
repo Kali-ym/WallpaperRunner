@@ -299,10 +299,27 @@ export default function SettingsPage(): JSX.Element {
       <section className="settings-section">
         <h3 className="settings-section-title">Wallpaper</h3>
         <p className="muted field-hint">
-          媒体端口 {settings.wallpaperMediaPort}。开机自启：{startupOn ? '已开启（后台无窗口）' : '未开启'}。
+          开机自启：{startupOn ? '已开启（后台无窗口）' : '未开启'}。
           「立即同步」会写入工程目录，并自动覆盖 WE 已导入的 myprojects 副本。
           首次只需导入一次 index.html；之后不必反复导入。
         </p>
+        <label className="field">
+          <span>媒体端口</span>
+          <input
+            className="text-input narrow"
+            type="number"
+            min={1024}
+            max={65535}
+            value={settings.wallpaperMediaPort}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                wallpaperMediaPort: Number(e.target.value) || settings.wallpaperMediaPort,
+              })
+            }
+            onBlur={() => void save({ wallpaperMediaPort: settings.wallpaperMediaPort })}
+          />
+        </label>
         <label className="field">
           <span>WE 工程目录</span>
           <div className="row">

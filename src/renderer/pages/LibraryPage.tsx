@@ -1,27 +1,65 @@
-import { useCallback, useEffect, useState, type JSX, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react'
 import GalleryCard from '../components/GalleryCard'
+import GalleryListRow from '../components/GalleryListRow'
 import ContextMenu from '../components/ContextMenu'
 import EditMetadataModal from '../components/EditMetadataModal'
 import JoinPlaylistModal from '../components/JoinPlaylistModal'
+import BatchTagModal from '../components/BatchTagModal'
 import { useToast } from '../lib/toast'
-import { api, type GalleryMetadata, type LibraryIndexEntry } from '../lib/api'
+import {
+  api,
+  type GalleryMetadata,
+  type LibraryFilters,
+  type LibraryIndexEntry,
+  type TagStat,
+} from '../lib/api'
 
 interface Props {
   onOpenGallery: (entry: LibraryIndexEntry) => void
 }
 
+type LibraryView = 'grid-comfy' | 'grid-compact' | 'grid-large' | 'list'
+
+const VIEW_KEY = 'wallpaper-runner:libraryView'
+const SOURCE_OPTIONS = ['xchina', 'telegram', 'telegraph'] as const
+
 function keyOf(e: LibraryIndexEntry): string {
   return `${e.source}:${e.galleryId}`
+}
+
+function readView(): LibraryView {
+  try {
+    const v = localStorage.getItem(VIEW_KEY)
+    if (v === 'grid-comfy' || v === 'grid-compact' || v === 'grid-large' || v === 'list') return v
+  } catch {
+    /* ignore */
+  }
+  return 'grid-comfy'
+}
+
+function hasActiveFilters(f: LibraryFilters, query: string): boolean {
+  if (query.trim()) return true
+  if (f.favoriteOnly) return true
+  if (f.tags && f.tags.length > 0) return true
+  if (f.sources && f.sources.length > 0) return true
+  if (f.downloadedFrom || f.downloadedTo) return true
+  if (f.minImages != null || f.maxImages != null) return true
+  return false
 }
 
 export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   const toast = useToast()
   const [query, setQuery] = useState('')
-  const [favoriteOnly, setFavoriteOnly] = useState(false)
+  const [filters, setFilters] = useState<LibraryFilters>({})
+  const [tagStats, setTagStats] = useState<TagStat[]>([])
+  const [tagsOpen, setTagsOpen] = useState(true)
+  const [view, setView] = useState<LibraryView>(() => readView())
   const [items, setItems] = useState<LibraryIndexEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [tagModal, setTagModal] = useState(false)
+  const [tagBusy, setTagBusy] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; entry: LibraryIndexEntry | null } | null>(
     null,
   )
@@ -33,13 +71,22 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     Array<{ id: string; name: string; galleryRefs: Array<{ source: string; galleryId: string }> }>
   >([])
 
-  const reload = useCallback((opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true)
-    void api.listLibrary(query, favoriteOnly).then((list: LibraryIndexEntry[]) => {
-      setItems(list)
-      setLoading(false)
-    })
-  }, [query, favoriteOnly])
+  const reload = useCallback(
+    (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true)
+      void Promise.all([api.listLibrary(query, filters), api.tagStats()])
+        .then(([list, stats]) => {
+          setItems(list)
+          setTagStats(stats)
+          setLoading(false)
+        })
+        .catch((err: unknown) => {
+          setLoading(false)
+          toast.error(err instanceof Error ? err.message : String(err))
+        })
+    },
+    [query, filters, toast],
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => reload(), 150)
@@ -50,12 +97,29 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     return api.onLibraryChange(() => reload({ silent: true }))
   }, [reload])
 
+  useEffect(() => {
+    setSelected((prev) => {
+      const keys = new Set(items.map(keyOf))
+      const next = new Set([...prev].filter((k) => keys.has(k)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [items])
+
+  function setViewPersist(v: LibraryView): void {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* ignore */
+    }
+  }
+
   function patchFavorite(entry: LibraryIndexEntry, favorite: boolean): void {
     setItems((prev) => {
       const next = prev.map((e) =>
         e.source === entry.source && e.galleryId === entry.galleryId ? { ...e, favorite } : e,
       )
-      if (favoriteOnly && !favorite) {
+      if (filters.favoriteOnly && !favorite) {
         return next.filter(
           (e) => !(e.source === entry.source && e.galleryId === entry.galleryId),
         )
@@ -78,9 +142,42 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     })
   }
 
+  function toggleTag(tag: string): void {
+    setFilters((prev) => {
+      const cur = prev.tags ?? []
+      const has = cur.some((t) => t.toLowerCase() === tag.toLowerCase())
+      const tags = has
+        ? cur.filter((t) => t.toLowerCase() !== tag.toLowerCase())
+        : [...cur, tag]
+      return { ...prev, tags: tags.length ? tags : undefined }
+    })
+  }
+
+  function toggleSource(source: string): void {
+    setFilters((prev) => {
+      const cur = prev.sources ?? []
+      const has = cur.includes(source)
+      const sources = has ? cur.filter((s) => s !== source) : [...cur, source]
+      return { ...prev, sources: sources.length ? sources : undefined }
+    })
+  }
+
+  function clearFilters(): void {
+    setQuery('')
+    setFilters({})
+  }
+
   const selectedRefs = items
     .filter((e) => selected.has(keyOf(e)))
     .map((e) => ({ source: e.source, galleryId: e.galleryId }))
+
+  const filtering = hasActiveFilters(filters, query)
+
+  const density = useMemo(() => {
+    if (view === 'grid-compact') return 'compact'
+    if (view === 'grid-large') return 'large'
+    return 'comfy'
+  }, [view])
 
   async function batchDelete(): Promise<void> {
     if (selectedRefs.length === 0) return
@@ -104,7 +201,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   }
 
   function openBlankMenu(e: MouseEvent): void {
-    if ((e.target as HTMLElement).closest('.gallery-card')) return
+    if ((e.target as HTMLElement).closest('.gallery-card, .gallery-list-row')) return
     e.preventDefault()
     setMenu({ x: e.clientX, y: e.clientY, entry: null })
   }
@@ -131,23 +228,15 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
       const detail = await api.getGallery(entry.source, entry.galleryId)
       setEditDetail(detail)
     }
-    if (id === 'favorite') {
-      patchFavorite(entry, !entry.favorite)
-    }
-    if (id === 'addPlaylist') {
-      await openJoin([entry])
-    }
-    if (id === 'folder') {
-      await api.openGalleryFolder(entry.source, entry.galleryId)
-    }
+    if (id === 'favorite') patchFavorite(entry, !entry.favorite)
+    if (id === 'addPlaylist') await openJoin([entry])
+    if (id === 'folder') await api.openGalleryFolder(entry.source, entry.galleryId)
     if (id === 'redownload') {
       const detail = await api.getGallery(entry.source, entry.galleryId)
       if (detail?.sourceUrl) {
         await api.redownloadGallery(detail.sourceUrl)
         toast.success('已加入重新下载')
-      } else {
-        toast.error('缺少来源 URL，无法重新下载')
-      }
+      } else toast.error('缺少来源 URL，无法重新下载')
     }
     if (id === 'delete') {
       if (!window.confirm(`确定删除「${entry.displayTitle || entry.title}」？`)) return
@@ -158,8 +247,8 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   }
 
   return (
-    <section className="page" onContextMenu={openBlankMenu}>
-      <div className="page-toolbar">
+    <section className="page library-page" onContextMenu={openBlankMenu}>
+      <div className="page-toolbar wrap">
         <input
           className="search-input"
           data-focus="library-search"
@@ -167,32 +256,168 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <div className="filter-chips" role="group" aria-label="来源">
+          {SOURCE_OPTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`chip ${(filters.sources ?? []).includes(s) ? 'active' : ''}`}
+              onClick={() => toggleSource(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
         <label className="inline-check">
           <input
             type="checkbox"
-            checked={favoriteOnly}
-            onChange={(e) => setFavoriteOnly(e.target.checked)}
+            checked={Boolean(filters.favoriteOnly)}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                favoriteOnly: e.target.checked ? true : undefined,
+              }))
+            }
           />
           仅收藏
         </label>
+        <label className="field-inline">
+          <span className="muted">从</span>
+          <input
+            type="date"
+            className="text-input narrow-date"
+            value={filters.downloadedFrom ?? ''}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                downloadedFrom: e.target.value || undefined,
+              }))
+            }
+          />
+        </label>
+        <label className="field-inline">
+          <span className="muted">到</span>
+          <input
+            type="date"
+            className="text-input narrow-date"
+            value={filters.downloadedTo ?? ''}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                downloadedTo: e.target.value || undefined,
+              }))
+            }
+          />
+        </label>
+        <label className="field-inline">
+          <span className="muted">张数</span>
+          <input
+            type="number"
+            className="text-input narrow"
+            min={0}
+            placeholder="min"
+            value={filters.minImages ?? ''}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                minImages: e.target.value === '' ? undefined : Number(e.target.value),
+              }))
+            }
+          />
+          <span className="muted">–</span>
+          <input
+            type="number"
+            className="text-input narrow"
+            min={0}
+            placeholder="max"
+            value={filters.maxImages ?? ''}
+            onChange={(e) =>
+              setFilters((prev) => ({
+                ...prev,
+                maxImages: e.target.value === '' ? undefined : Number(e.target.value),
+              }))
+            }
+          />
+        </label>
+        <button type="button" className="btn" onClick={clearFilters}>
+          清除筛选
+        </button>
         <button type="button" className="btn" onClick={() => setSelectMode((v) => !v)}>
           {selectMode ? '取消多选' : '多选'}
         </button>
-        <span className="muted">{loading ? '加载中…' : `${items.length} 部套图`}</span>
+        <div className="view-switch" role="group" aria-label="视图">
+          {(
+            [
+              ['grid-compact', '紧凑'],
+              ['grid-comfy', '舒适'],
+              ['grid-large', '大图'],
+              ['list', '列表'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`chip ${view === id ? 'active' : ''}`}
+              onClick={() => setViewPersist(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="muted">
+          {loading ? '加载中…' : `${items.length} 部套图${filtering ? '（已筛选）' : ''}`}
+        </span>
       </div>
 
-      {selectMode && selectedRefs.length > 0 ? (
+      {selectMode ? (
         <div className="page-toolbar batch-bar">
-          <span>已选 {selectedRefs.length}</span>
-          <button type="button" className="btn" onClick={() => void batchFavorite(true)}>
+          <span>
+            已选 {selectedRefs.length} / 当前 {items.length}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setSelected(new Set(items.map(keyOf)))}
+          >
+            全选
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() =>
+              setSelected((prev) => {
+                const next = new Set(prev)
+                for (const e of items) {
+                  const k = keyOf(e)
+                  if (next.has(k)) next.delete(k)
+                  else next.add(k)
+                }
+                return next
+              })
+            }
+          >
+            反选
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={selectedRefs.length === 0}
+            onClick={() => void batchFavorite(true)}
+          >
             批量收藏
           </button>
-          <button type="button" className="btn" onClick={() => void batchFavorite(false)}>
+          <button
+            type="button"
+            className="btn"
+            disabled={selectedRefs.length === 0}
+            onClick={() => void batchFavorite(false)}
+          >
             取消收藏
           </button>
           <button
             type="button"
             className="btn"
+            disabled={selectedRefs.length === 0}
             onClick={() => {
               const entries = items.filter((e) => selected.has(keyOf(e)))
               void openJoin(entries)
@@ -200,40 +425,136 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           >
             加入播放列表
           </button>
-          <button type="button" className="btn danger" onClick={() => void batchDelete()}>
+          <button
+            type="button"
+            className="btn"
+            disabled={selectedRefs.length === 0}
+            onClick={() => setTagModal(true)}
+          >
+            批量打标签
+          </button>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={selectedRefs.length === 0}
+            onClick={() => void batchDelete()}
+          >
             批量删除
           </button>
         </div>
       ) : null}
 
-      {items.length === 0 && !loading ? (
-        <p className="empty-hint">还没有套图。去「下载」页粘贴链接开始。</p>
-      ) : loading && items.length === 0 ? (
-        <div className="skeleton-grid" aria-hidden>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div className="skeleton-card" key={i}>
-              <div className="skeleton-cover" />
-              <div className="skeleton-line" />
-              <div className="skeleton-line short" />
+      <div className={`library-layout ${tagsOpen ? 'with-tags' : ''}`}>
+        <aside className={`tag-sidebar ${tagsOpen ? '' : 'collapsed'}`}>
+          <div className="tag-sidebar-head">
+            <strong>标签</strong>
+            <button type="button" className="btn" onClick={() => setTagsOpen((v) => !v)}>
+              {tagsOpen ? '收起' : '展开'}
+            </button>
+          </div>
+          {tagsOpen ? (
+            <>
+              {(filters.tags ?? []).length > 0 ? (
+                <div className="filter-chips">
+                  {(filters.tags ?? []).map((t) => (
+                    <button key={t} type="button" className="chip active" onClick={() => toggleTag(t)}>
+                      {t} ×
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <ul className="tag-stat-list">
+                {tagStats.map((s) => {
+                  const on = (filters.tags ?? []).some(
+                    (t) => t.toLowerCase() === s.tag.toLowerCase(),
+                  )
+                  return (
+                    <li key={s.tag}>
+                      <button
+                        type="button"
+                        className={`tag-stat-btn ${on ? 'active' : ''}`}
+                        onClick={() => toggleTag(s.tag)}
+                      >
+                        <span>{s.tag}</span>
+                        <span className="muted">{s.count}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+                {tagStats.length === 0 ? <li className="muted">暂无标签</li> : null}
+              </ul>
+            </>
+          ) : null}
+        </aside>
+
+        <div className="library-main">
+          {items.length === 0 && !loading ? (
+            <div className="empty-state">
+              {filtering ? (
+                <>
+                  <p className="empty-hint">没有符合条件的套图</p>
+                  <button type="button" className="btn primary" onClick={clearFilters}>
+                    清除筛选
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="empty-hint">还没有套图</p>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() =>
+                      window.dispatchEvent(new CustomEvent('wallpaper-runner:go-download'))
+                    }
+                  >
+                    去下载
+                  </button>
+                </>
+              )}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="gallery-grid">
-          {items.map((entry) => (
-            <div key={keyOf(entry)} onContextMenu={(e) => openCardMenu(e, entry)}>
-              <GalleryCard
-                entry={entry}
-                selectMode={selectMode}
-                selected={selected.has(keyOf(entry))}
-                onOpen={onOpenGallery}
-                onToggleSelect={toggleSelect}
-                onToggleFavorite={(e) => patchFavorite(e, !e.favorite)}
-              />
+          ) : loading && items.length === 0 ? (
+            <div className="skeleton-grid" aria-hidden>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div className="skeleton-card" key={i}>
+                  <div className="skeleton-cover" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line short" />
+                </div>
+              ))}
             </div>
-          ))}
+          ) : view === 'list' ? (
+            <div className="gallery-list">
+              {items.map((entry) => (
+                <div key={keyOf(entry)} onContextMenu={(e) => openCardMenu(e, entry)}>
+                  <GalleryListRow
+                    entry={entry}
+                    selectMode={selectMode}
+                    selected={selected.has(keyOf(entry))}
+                    onOpen={onOpenGallery}
+                    onToggleSelect={toggleSelect}
+                    onToggleFavorite={(e) => patchFavorite(e, !e.favorite)}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="gallery-grid" data-density={density}>
+              {items.map((entry) => (
+                <div key={keyOf(entry)} onContextMenu={(e) => openCardMenu(e, entry)}>
+                  <GalleryCard
+                    entry={entry}
+                    selectMode={selectMode}
+                    selected={selected.has(keyOf(entry))}
+                    onOpen={onOpenGallery}
+                    onToggleSelect={toggleSelect}
+                    onToggleFavorite={(e) => patchFavorite(e, !e.favorite)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {menu ? (
         <ContextMenu
@@ -296,6 +617,24 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           onError={(message) => toast.error(message)}
         />
       ) : null}
+
+      <BatchTagModal
+        open={tagModal}
+        busy={tagBusy}
+        onClose={() => setTagModal(false)}
+        onSubmit={(tags) => {
+          setTagBusy(true)
+          void api
+            .addTags(selectedRefs, tags)
+            .then((n) => {
+              toast.success(`已为 ${n} 部套图追加标签`)
+              setTagModal(false)
+              reload()
+            })
+            .catch((err: unknown) => toast.error(err instanceof Error ? err.message : String(err)))
+            .finally(() => setTagBusy(false))
+        }}
+      />
     </section>
   )
 }
