@@ -1,5 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
+import { access, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { finished } from 'node:stream/promises'
 import { httpFetch } from '../http/client'
 
 export interface DownloadFileResult {
@@ -16,49 +18,87 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function readResponseBody(
-  res: Response,
-  onProgress?: (p: DownloadFileProgress) => void,
-  signal?: AbortSignal,
-): Promise<Buffer> {
-  const totalHeader = res.headers.get('content-length')
-  const total = totalHeader ? Number.parseInt(totalHeader, 10) : null
-  const knownTotal = total && Number.isFinite(total) && total > 0 ? total : null
-
-  const body = res.body
-  if (!body || typeof body.getReader !== 'function' || !onProgress) {
-    const buf = Buffer.from(await res.arrayBuffer())
-    onProgress?.({ received: buf.byteLength, total: knownTotal ?? buf.byteLength })
-    return buf
-  }
-
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let received = 0
-  let lastEmit = 0
+async function partialSize(partPath: string): Promise<number> {
   try {
-    while (true) {
-      if (signal?.aborted) {
-        await reader.cancel().catch(() => undefined)
-        throw signal.reason instanceof Error ? signal.reason : new Error('已取消')
-      }
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value?.byteLength) {
-        chunks.push(value)
-        received += value.byteLength
-        const now = Date.now()
-        if (now - lastEmit >= 200) {
-          lastEmit = now
-          onProgress({ received, total: knownTotal })
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock?.()
+    const st = await stat(partPath)
+    return st.size
+  } catch {
+    return 0
   }
-  onProgress({ received, total: knownTotal ?? received })
-  return Buffer.concat(chunks)
+}
+
+function headersRecord(
+  base: Record<string, string>,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  return { ...base, ...(extra ?? {}) }
+}
+
+async function streamBodyToPart(
+  res: Response,
+  partPath: string,
+  offset: number,
+  opts?: {
+    signal?: AbortSignal
+    onProgress?: (p: DownloadFileProgress) => void
+    total: number | null
+  },
+): Promise<number> {
+  const stream = createWriteStream(partPath, { flags: offset > 0 ? 'a' : 'w' })
+  let received = offset
+  let lastEmit = 0
+
+  const emit = (force = false) => {
+    const now = Date.now()
+    if (!force && now - lastEmit < 200) return
+    lastEmit = now
+    opts?.onProgress?.({ received, total: opts.total })
+  }
+
+  try {
+    const body = res.body
+    if (body && typeof body.getReader === 'function') {
+      const reader = body.getReader()
+      try {
+        while (true) {
+          if (opts?.signal?.aborted) {
+            await reader.cancel().catch(() => undefined)
+            throw opts.signal.reason instanceof Error ? opts.signal.reason : new Error('已取消')
+          }
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value?.byteLength) {
+            const buf = Buffer.from(value)
+            if (!stream.write(buf)) {
+              await new Promise<void>((resolve) => stream.once('drain', resolve))
+            }
+            received += buf.byteLength
+            emit()
+          }
+        }
+      } finally {
+        reader.releaseLock?.()
+      }
+    } else {
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (opts?.signal?.aborted) {
+        throw opts.signal.reason instanceof Error ? opts.signal.reason : new Error('已取消')
+      }
+      if (!stream.write(buf)) {
+        await new Promise<void>((resolve) => stream.once('drain', resolve))
+      }
+      received += buf.byteLength
+      emit(true)
+    }
+    stream.end()
+    await finished(stream)
+  } catch (err) {
+    stream.destroy()
+    throw err
+  }
+
+  emit(true)
+  return received
 }
 
 export async function downloadFile(
@@ -73,23 +113,34 @@ export async function downloadFile(
   },
 ): Promise<DownloadFileResult> {
   const retries = opts?.retries ?? 3
+  const partPath = `${destPath}.part`
   let lastError: unknown
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const res = await httpFetch(url, {
-        signal: opts?.signal,
-        headers: {
+      if (opts?.signal?.aborted) {
+        throw opts.signal.reason instanceof Error ? opts.signal.reason : new Error('已取消')
+      }
+
+      let offset = await partialSize(partPath)
+      const baseHeaders = headersRecord(
+        {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
           Referer: opts?.referer ?? 'https://xchina.co/',
-          ...(opts?.headers ?? {}),
         },
+        opts?.headers,
+      )
+      if (offset > 0) {
+        baseHeaders.Range = `bytes=${offset}-`
+      }
+
+      const res = await httpFetch(url, {
+        signal: opts?.signal,
+        headers: baseHeaders,
       })
-      // Prefer curl on Windows (Cloudflare). Progress still reports after body is read;
-      // mid-stream progress only applies when undici returns a ReadableStream.
 
       if (res.status === 404) {
         throw new Error(`资源不存在 (HTTP 404)，图床可能已失效: ${url}`)
@@ -97,23 +148,53 @@ export async function downloadFile(
       if (res.status === 403 || res.status === 429 || res.status >= 500) {
         throw new Error(`HTTP ${res.status}`)
       }
-      if (!res.ok) {
+
+      // Server ignored Range and sent full body — rewrite from scratch.
+      if (offset > 0 && res.status === 200) {
+        await unlink(partPath).catch(() => undefined)
+        offset = 0
+      }
+
+      if (!res.ok && res.status !== 206) {
         throw new Error(`HTTP ${res.status} downloading ${url}`)
       }
 
-      const buf = await readResponseBody(res, opts?.onProgress, opts?.signal)
       const contentType = res.headers.get('content-type')
       if (contentType && contentType.includes('text/html')) {
         throw new Error(`Expected image but got HTML from ${url}`)
       }
-      if (buf.byteLength < 1024) {
-        throw new Error(`Downloaded file too small (${buf.byteLength} bytes): ${url}`)
-      }
+
+      const contentLength = Number.parseInt(res.headers.get('content-length') ?? '', 10)
+      const knownLength = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
+      const total =
+        res.status === 206 && knownLength != null
+          ? offset + knownLength
+          : knownLength
 
       await mkdir(dirname(destPath), { recursive: true })
-      await writeFile(destPath, buf)
+
+      // Empty part file when starting fresh so flags:'w' truncates cleanly.
+      if (offset === 0) {
+        await writeFile(partPath, Buffer.alloc(0))
+      }
+
+      const received = await streamBodyToPart(res, partPath, offset, {
+        signal: opts?.signal,
+        onProgress: opts?.onProgress,
+        total,
+      })
+
+      if (received < 1024) {
+        await unlink(partPath).catch(() => undefined)
+        throw new Error(`Downloaded file too small (${received} bytes): ${url}`)
+      }
+
+      await unlink(destPath).catch(() => undefined)
+      await rename(partPath, destPath)
+      await access(destPath)
+
       return {
-        bytes: buf.byteLength,
+        bytes: received,
         contentType,
       }
     } catch (err) {

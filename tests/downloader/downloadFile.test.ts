@@ -93,4 +93,51 @@ describe('downloadFile helpers', () => {
     expect(events[events.length - 1]?.received).toBe(3000)
     expect(events.some((e) => e.total === 3000)).toBe(true)
   })
+
+  it('resumes from .part with Range header', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dl-part-'))
+    dirs.push(root)
+    const dest = join(root, '001.jpg')
+    const partPath = `${dest}.part`
+    const existing = Buffer.alloc(1024, 9)
+    await writeFile(partPath, existing)
+
+    const rest = Buffer.alloc(1024, 8)
+    const calls: Array<{ headers?: Record<string, string> }> = []
+    vi.mocked(httpFetch).mockImplementation(async (_url, init) => {
+      calls.push({ headers: init?.headers as Record<string, string> })
+      let done = false
+      return {
+        ok: true,
+        status: 206,
+        headers: {
+          get: (k: string) => {
+            const key = k.toLowerCase()
+            if (key === 'content-length') return '1024'
+            if (key === 'content-type') return 'image/jpeg'
+            return null
+          },
+        },
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (done) return { done: true, value: undefined }
+              done = true
+              return { done: false, value: rest }
+            },
+            cancel: async () => undefined,
+            releaseLock: () => undefined,
+          }),
+        },
+        arrayBuffer: async () => rest,
+      } as unknown as Response
+    })
+
+    const result = await downloadFile('https://example.com/a.jpg', dest, { retries: 1 })
+    expect(result.bytes).toBe(2048)
+    expect(JSON.stringify(calls[0]?.headers)).toMatch(/bytes=1024-/)
+    const written = await readFile(dest)
+    expect(written.byteLength).toBe(2048)
+    await expect(readFile(partPath)).rejects.toThrow()
+  })
 })
