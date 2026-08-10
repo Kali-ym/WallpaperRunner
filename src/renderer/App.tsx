@@ -7,8 +7,9 @@ import PlaylistsPage from './pages/PlaylistsPage'
 import ToastHost from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ShortcutHelp from './components/ShortcutHelp'
-import { ToastProvider } from './lib/toast'
-import { api, type LibraryIndexEntry } from './lib/api'
+import DownloadDock from './components/DownloadDock'
+import { ToastProvider, useToast } from './lib/toast'
+import { api, type LibraryIndexEntry, type QueueTask } from './lib/api'
 import {
   applyTheme,
   THEME_CHANGED_EVENT,
@@ -19,6 +20,7 @@ import {
 type Tab = 'library' | 'playlists' | 'download' | 'settings'
 
 const TABS: Tab[] = ['library', 'playlists', 'download', 'settings']
+const ACTIVE = new Set(['queued', 'resolving', 'downloading'])
 
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false
@@ -28,12 +30,15 @@ function isTypingTarget(t: EventTarget | null): boolean {
 }
 
 function AppShell(): JSX.Element {
+  const toast = useToast()
   const [tab, setTab] = useState<Tab>('library')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('system')
   const [helpOpen, setHelpOpen] = useState(false)
+  const [tasks, setTasks] = useState<QueueTask[]>([])
   const helpOpenRef = useRef(helpOpen)
   const activeRef = useRef(active)
+  const prevStatus = useRef<Map<string, QueueTask['status']>>(new Map())
   helpOpenRef.current = helpOpen
   activeRef.current = active
 
@@ -58,6 +63,26 @@ function AppShell(): JSX.Element {
     window.addEventListener(THEME_CHANGED_EVENT, onTheme)
     return () => window.removeEventListener(THEME_CHANGED_EVENT, onTheme)
   }, [])
+
+  useEffect(() => {
+    void api.listTasks().then((list) => {
+      setTasks(list)
+      prevStatus.current = new Map(list.map((t) => [t.id, t.status]))
+    })
+    return api.onQueueUpdate((list) => {
+      setTasks(list)
+      for (const t of list) {
+        const prev = prevStatus.current.get(t.id)
+        if (prev && prev !== 'completed' && t.status === 'completed') {
+          toast.success(t.title ? `下载完成：${t.title}` : '下载完成')
+        }
+        if (prev && prev !== 'failed' && t.status === 'failed') {
+          toast.error(t.error ? `下载失败：${t.error}` : '下载失败')
+        }
+      }
+      prevStatus.current = new Map(list.map((x) => [x.id, x.status]))
+    })
+  }, [toast])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
@@ -106,6 +131,8 @@ function AppShell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const activeCount = tasks.filter((t) => ACTIVE.has(t.status)).length
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -143,6 +170,7 @@ function AppShell(): JSX.Element {
             }}
           >
             下载
+            {activeCount > 0 ? <span className="nav-badge">{activeCount}</span> : null}
           </button>
           <button
             type="button"
@@ -194,6 +222,13 @@ function AppShell(): JSX.Element {
           <SettingsPage />
         </div>
       </main>
+      <DownloadDock
+        tasks={tasks}
+        onOpenDownload={() => {
+          setActive(null)
+          setTab('download')
+        }}
+      />
       {helpOpen ? <ShortcutHelp onClose={() => setHelpOpen(false)} /> : null}
       <ToastHost />
     </div>
