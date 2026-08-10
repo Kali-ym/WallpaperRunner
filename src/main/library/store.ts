@@ -2,6 +2,15 @@ import { EventEmitter } from 'node:events'
 import { mkdir, readdir, readFile, writeFile, access, rm, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { galleryFolderName } from './paths'
+import {
+  aggregateTagStats,
+  applyLibraryFilters,
+  mergeTags,
+  type LibraryFilters,
+  type TagStat,
+} from './filters'
+
+export type { LibraryFilters, TagStat } from './filters'
 
 export interface GalleryMetadata {
   source: string
@@ -171,17 +180,35 @@ export class LibraryStore extends EventEmitter {
     await this.saveIndex(entries)
   }
 
-  async search(query: string, opts?: { favoriteOnly?: boolean }): Promise<LibraryIndexEntry[]> {
-    const q = query.trim().toLowerCase()
-    let entries = await this.loadIndex()
-    if (opts?.favoriteOnly) {
-      entries = entries.filter((e) => e.favorite)
+  async search(query: string, opts?: LibraryFilters): Promise<LibraryIndexEntry[]> {
+    const entries = await this.loadIndex()
+    return applyLibraryFilters(entries, query, opts) as LibraryIndexEntry[]
+  }
+
+  async listTagStats(): Promise<TagStat[]> {
+    const entries = await this.loadIndex()
+    return aggregateTagStats(entries)
+  }
+
+  async addTags(refs: GalleryRef[], tags: string[]): Promise<number> {
+    const incoming = tags.map((t) => t.trim()).filter(Boolean)
+    if (incoming.length === 0 || refs.length === 0) return 0
+    let n = 0
+    for (const ref of refs) {
+      try {
+        const hit = await this.findEntry(ref.source, ref.galleryId)
+        if (!hit) continue
+        const meta = await this.readMetaAt(hit.dirName)
+        if (!meta) continue
+        const next = mergeTags(meta.tags, incoming)
+        if (next.length === meta.tags.length && next.every((t, i) => t === meta.tags[i])) continue
+        await this.updateGalleryMeta(ref.source, ref.galleryId, { tags: next })
+        n += 1
+      } catch {
+        // skip missing
+      }
     }
-    if (!q) return entries
-    return entries.filter((e) => {
-      const hay = [displayOf(e), e.title, e.author, ...e.tags].join(' ').toLowerCase()
-      return hay.includes(q)
-    })
+    return n
   }
 
   async rebuildIndex(): Promise<LibraryIndexEntry[]> {
