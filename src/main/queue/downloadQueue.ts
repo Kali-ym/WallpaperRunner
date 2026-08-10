@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
-import { join } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { getAdapterById, resolveAdapter } from '../adapters/registry'
 import { downloadSelectedResources } from '../adapters/telegram/download'
 import { downloadGallery, GalleryExistsError } from '../downloader/downloadGallery'
@@ -16,11 +17,18 @@ import {
   RateTracker,
   type QueueFileProgress,
 } from './progress'
+import {
+  normalizeTasksForRestore,
+  serializeQueueTasks,
+  type PersistedQueue,
+} from './persist'
 import type { QueueProgress, QueueTask, QueueTaskStatus } from './types'
 
 export interface DownloadQueueOptions {
   store: LibraryStore
   imageConcurrency: number
+  /** When set, debounce-write queue state here and restore on `restoreFromDisk`. */
+  persistPath?: string
   fetchText?: (url: string) => Promise<string>
   getTelegramCredentials?: () => { apiId: number; apiHash: string } | null
 }
@@ -36,6 +44,7 @@ export class DownloadQueue extends EventEmitter {
   private running = false
   private paused = false
   private abortControllers = new Map<string, AbortController>()
+  private persistTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly opts: DownloadQueueOptions) {
     super()
@@ -43,6 +52,48 @@ export class DownloadQueue extends EventEmitter {
 
   listTasks(): QueueTask[] {
     return this.tasks.map(({ overwrite: _o, ...t }) => ({ ...t }))
+  }
+
+  async restoreFromDisk(opts?: { autoStart?: boolean }): Promise<void> {
+    const path = this.opts.persistPath
+    if (!path) return
+    try {
+      const raw = await readFile(path, 'utf8')
+      const parsed = JSON.parse(raw) as PersistedQueue
+      if (!Array.isArray(parsed.tasks)) return
+      const restored = normalizeTasksForRestore(parsed.tasks)
+      this.tasks = restored.map((t) => ({ ...t }))
+      this.emitUpdate()
+      if (
+        opts?.autoStart !== false &&
+        this.tasks.some((t) => t.status === 'queued' || t.status === 'skipped')
+      ) {
+        void this.pump()
+      }
+    } catch {
+      /* missing or corrupt — start empty */
+    }
+  }
+
+  private schedulePersist(): void {
+    if (!this.opts.persistPath) return
+    if (this.persistTimer) clearTimeout(this.persistTimer)
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null
+      void this.persistNow()
+    }, 200)
+  }
+
+  private async persistNow(): Promise<void> {
+    const path = this.opts.persistPath
+    if (!path) return
+    try {
+      const payload = serializeQueueTasks(this.listTasks())
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, JSON.stringify(payload, null, 2), 'utf8')
+    } catch (err) {
+      console.error('queue persist failed', err)
+    }
   }
 
   enqueue(
@@ -151,6 +202,7 @@ export class DownloadQueue extends EventEmitter {
 
   private emitUpdate(): void {
     this.emit('task', this.listTasks())
+    this.schedulePersist()
   }
 
   private patch(taskId: string, partial: Partial<QueueTask>): void {

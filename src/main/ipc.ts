@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { resolve, sep, extname, join } from 'node:path'
 import { mkdir, readFile } from 'node:fs/promises'
 import { getAdapterById, registerAdapter, resolveAdapter } from './adapters/registry'
@@ -147,6 +147,7 @@ function rebuildQueue(): void {
   queue = new DownloadQueue({
     store,
     imageConcurrency: settings.imageConcurrency,
+    persistPath: join(app.getPath('userData'), 'queue.json'),
     getTelegramCredentials: telegramCredentials,
   })
   queue.on('task', () => broadcastTasks())
@@ -167,6 +168,7 @@ export async function initAppServices(): Promise<void> {
   bindLibraryStore(new LibraryStore(settings.downloadRoot))
   await store.ensureRoot()
   rebuildQueue()
+  await queue.restoreFromDisk()
   await ensureMediaServer()
   if (settings.wallpaperAutoSync) {
     void runWallpaperSync()

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +14,61 @@ import { clearAdapters, registerAdapter } from '@main/adapters/registry'
 import type { SourceAdapter } from '@main/adapters/types'
 import { LibraryStore } from '@main/library/store'
 import { DownloadQueue } from '@main/queue/downloadQueue'
+import { normalizeTasksForRestore, trimTerminalTasks } from '@main/queue/persist'
+import type { QueueTask } from '@main/queue/types'
+
+describe('queue persist helpers', () => {
+  it('normalizeTasksForRestore resets downloading and resolving to queued', () => {
+    const now = new Date().toISOString()
+    const tasks: QueueTask[] = [
+      {
+        id: 'a',
+        url: 'https://x',
+        status: 'downloading',
+        done: 1,
+        total: 3,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'b',
+        url: 'https://y',
+        status: 'resolving',
+        done: 0,
+        total: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'c',
+        url: 'https://z',
+        status: 'queued',
+        done: 0,
+        total: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]
+    const next = normalizeTasksForRestore(tasks)
+    expect(next.map((t) => t.status)).toEqual(['queued', 'queued', 'queued'])
+  })
+
+  it('trimTerminalTasks keeps last N terminal tasks', () => {
+    const base = new Date('2026-01-01T00:00:00.000Z').getTime()
+    const tasks: QueueTask[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `t${i}`,
+      url: `https://x/${i}`,
+      status: (i < 2 ? 'queued' : 'completed') as QueueTask['status'],
+      done: 0,
+      total: 0,
+      createdAt: new Date(base + i).toISOString(),
+      updatedAt: new Date(base + i).toISOString(),
+    }))
+    const trimmed = trimTerminalTasks(tasks, 2)
+    expect(trimmed.filter((t) => t.status === 'queued')).toHaveLength(2)
+    expect(trimmed.filter((t) => t.status === 'completed')).toHaveLength(2)
+  })
+})
 
 describe('DownloadQueue', () => {
   const dirs: string[] = []
@@ -75,5 +130,39 @@ describe('DownloadQueue', () => {
     expect(tasks[1].status).toBe('completed')
     expect(tasks[1].done).toBe(2)
     expect(await store.galleryExists('fake', 'g1')).toBe(true)
+  })
+
+  it('persists queue and restores downloading as queued', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'q-persist-'))
+    dirs.push(root)
+    const persistPath = join(root, 'queue.json')
+    const now = new Date().toISOString()
+    await writeFile(
+      persistPath,
+      JSON.stringify({
+        updatedAt: now,
+        tasks: [
+          {
+            id: 'task_1',
+            url: 'https://fake.test/gallery',
+            status: 'downloading',
+            source: 'fake',
+            done: 1,
+            total: 2,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      }),
+      'utf8',
+    )
+
+    const store = new LibraryStore(root)
+    const queue = new DownloadQueue({ store, imageConcurrency: 1, persistPath })
+    await queue.restoreFromDisk({ autoStart: false })
+    const tasks = queue.listTasks()
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]?.status).toBe('queued')
+    expect(tasks[0]?.url).toBe('https://fake.test/gallery')
   })
 })
