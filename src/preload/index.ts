@@ -2,12 +2,13 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { DownloadSource } from '../main/sources/types'
 import type { AppSettings } from '../main/settings'
 import type { GalleryMetadata, LibraryIndexEntry } from '../main/library/store'
+import type { LibraryFilters, TagStat } from '../main/library/filters'
 import type { QueueTask } from '../main/queue/types'
 import type { ResourceManifest } from '../main/resources/types'
 import type { TelegramAuthStatus } from '../main/telegram/client'
 
 export type GalleryRef = { source: string; galleryId: string }
-export type { ResourceManifest, TelegramAuthStatus, DownloadSource }
+export type { ResourceManifest, TelegramAuthStatus, DownloadSource, LibraryFilters, TagStat }
 
 const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
@@ -15,8 +16,13 @@ const api = {
     ipcRenderer.invoke('settings:set', partial),
   pickDownloadRoot: (): Promise<string | null> =>
     ipcRenderer.invoke('settings:pickDownloadRoot'),
-  listLibrary: (query?: string, favoriteOnly?: boolean): Promise<LibraryIndexEntry[]> =>
-    ipcRenderer.invoke('library:list', query, favoriteOnly),
+  listLibrary: (
+    query?: string,
+    filters?: LibraryFilters | boolean,
+  ): Promise<LibraryIndexEntry[]> => ipcRenderer.invoke('library:list', query, filters),
+  tagStats: (): Promise<TagStat[]> => ipcRenderer.invoke('library:tagStats'),
+  addTags: (refs: GalleryRef[], tags: string[]): Promise<number> =>
+    ipcRenderer.invoke('library:addTags', refs, tags),
   listPlaylists: (): Promise<
     Array<{
       id: string

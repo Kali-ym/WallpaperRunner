@@ -313,9 +313,25 @@ export function registerIpc(): void {
     return { installed: isWallpaperMediaStartupInstalled() }
   })
 
-  ipcMain.handle('library:list', async (_e, query?: string, favoriteOnly?: boolean) => {
-    return store.search(query ?? '', { favoriteOnly: Boolean(favoriteOnly) })
-  })
+  ipcMain.handle(
+    'library:list',
+    async (_e, query?: string, filters?: import('./library/filters').LibraryFilters | boolean) => {
+      const f =
+        typeof filters === 'boolean' ? { favoriteOnly: filters } : (filters ?? {})
+      return store.search(query ?? '', f)
+    },
+  )
+
+  ipcMain.handle('library:tagStats', async () => store.listTagStats())
+
+  ipcMain.handle(
+    'library:addTags',
+    async (_e, refs: Array<{ source: string; galleryId: string }>, tags: string[]) => {
+      const n = await store.addTags(refs, tags)
+      if (n > 0) broadcastLibraryChanged()
+      return n
+    },
+  )
 
   ipcMain.handle('playlists:list', async () => playlistStore.list())
 
