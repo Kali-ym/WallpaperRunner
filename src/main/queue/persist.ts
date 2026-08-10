@@ -9,6 +9,7 @@ const ACTIVE: ReadonlySet<QueueTask['status']> = new Set([
   'queued',
   'resolving',
   'downloading',
+  'paused',
   'skipped',
 ])
 
@@ -22,7 +23,11 @@ const TERMINAL: ReadonlySet<QueueTask['status']> = new Set([
 export function normalizeTasksForRestore(tasks: QueueTask[]): QueueTask[] {
   const now = new Date().toISOString()
   return tasks.map((t) => {
-    if (t.status === 'downloading' || t.status === 'resolving') {
+    if (
+      t.status === 'downloading' ||
+      t.status === 'resolving' ||
+      t.status === 'paused'
+    ) {
       return { ...t, status: 'queued', updatedAt: now }
     }
     return { ...t }

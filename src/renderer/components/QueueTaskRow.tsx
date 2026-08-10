@@ -5,6 +5,7 @@ const statusLabel: Record<QueueTask['status'], string> = {
   queued: '等待',
   resolving: '解析中',
   downloading: '下载中',
+  paused: '已暂停',
   completed: '完成',
   failed: '失败',
   skipped: '跳过',
@@ -43,9 +44,20 @@ const fileStatusLabel: Record<string, string> = {
 export type QueueTaskRowProps = {
   task: QueueTask
   onCancel: (id: string) => void
+  onPause?: (id: string) => void
+  onResume?: (id: string) => void
+  onMove?: (id: string, direction: 'up' | 'down') => void
+  onRetry?: (id: string) => void
 }
 
-export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX.Element {
+export default function QueueTaskRow({
+  task,
+  onCancel,
+  onPause,
+  onResume,
+  onMove,
+  onRetry,
+}: QueueTaskRowProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const percent =
     task.percent ??
@@ -55,17 +67,26 @@ export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX
         ? Math.round((task.done / task.total) * 100)
         : 0)
   const canCancel =
+    task.status === 'queued' ||
+    task.status === 'paused' ||
+    task.status === 'resolving' ||
+    task.status === 'downloading'
+  const canPause =
     task.status === 'queued' || task.status === 'resolving' || task.status === 'downloading'
+  const canResume = task.status === 'paused'
+  const canMove = task.status === 'queued' || task.status === 'paused'
+  const canRetry = task.status === 'failed' || task.status === 'cancelled'
   const speed = formatSpeed(task.bytesPerSec)
   const eta = formatEta(task.etaSec)
   const sizeLabel =
-    task.bytesReceived != null && (task.status === 'downloading' || task.status === 'completed')
+    task.bytesReceived != null &&
+    (task.status === 'downloading' || task.status === 'completed' || task.status === 'paused')
       ? task.bytesTotal && task.bytesTotal > 0
         ? `${formatBytes(task.bytesReceived)}/${formatBytes(task.bytesTotal)}`
         : formatBytes(task.bytesReceived)
       : ''
   const showBar =
-    (task.status === 'downloading' || task.status === 'resolving') &&
+    (task.status === 'downloading' || task.status === 'resolving' || task.status === 'paused') &&
     (Boolean(task.bytesTotal && task.bytesTotal > 0) || task.total > 0)
 
   return (
@@ -124,11 +145,43 @@ export default function QueueTaskRow({ task, onCancel }: QueueTaskRowProps): JSX
           </ul>
         ) : null}
       </div>
-      {canCancel ? (
-        <button type="button" className="btn" onClick={() => onCancel(task.id)}>
-          取消
-        </button>
-      ) : null}
+      <div className="task-actions">
+        {canMove && onMove ? (
+          <>
+            <button type="button" className="btn tiny" title="上移" onClick={() => onMove(task.id, 'up')}>
+              ↑
+            </button>
+            <button
+              type="button"
+              className="btn tiny"
+              title="下移"
+              onClick={() => onMove(task.id, 'down')}
+            >
+              ↓
+            </button>
+          </>
+        ) : null}
+        {canPause && onPause ? (
+          <button type="button" className="btn" onClick={() => onPause(task.id)}>
+            暂停
+          </button>
+        ) : null}
+        {canResume && onResume ? (
+          <button type="button" className="btn primary" onClick={() => onResume(task.id)}>
+            继续
+          </button>
+        ) : null}
+        {canRetry && onRetry ? (
+          <button type="button" className="btn primary" onClick={() => onRetry(task.id)}>
+            重试
+          </button>
+        ) : null}
+        {canCancel ? (
+          <button type="button" className="btn" onClick={() => onCancel(task.id)}>
+            取消
+          </button>
+        ) : null}
+      </div>
     </li>
   )
 }

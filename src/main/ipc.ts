@@ -29,6 +29,7 @@ export type AskExtractPayload = {
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
 import { PlaylistStore } from './library/playlists'
+import { importLocalFolders } from './library/importLocalFolders'
 import { DownloadQueue } from './queue/downloadQueue'
 import { loadSettings, saveSettings, type AppSettings } from './settings'
 import { telegramService } from './telegram/client'
@@ -479,6 +480,25 @@ export function registerIpc(): void {
     return tasks
   })
 
+  ipcMain.handle('library:importLocalFolders', async (_e, paths: string[]) => {
+    if (!Array.isArray(paths) || paths.length === 0) {
+      return { imported: [], skipped: [] }
+    }
+    const cleaned = paths.map((p) => String(p || '').trim()).filter(Boolean)
+    const result = await importLocalFolders(store, cleaned)
+    if (result.imported.length > 0) scheduleWallpaperSync()
+    return {
+      imported: result.imported.length,
+      skipped: result.skipped,
+      galleries: result.imported.map((g) => ({
+        source: g.source,
+        galleryId: g.galleryId,
+        title: g.title,
+        imageCount: g.images.length,
+      })),
+    }
+  })
+
   ipcMain.handle(
     'library:extractZip',
     async (
@@ -549,6 +569,32 @@ export function registerIpc(): void {
   ipcMain.handle('queue:cancel', async (_e, taskId: string) => {
     queue.cancel(taskId)
     broadcastTasks()
+  })
+
+  ipcMain.handle('queue:pauseTask', async (_e, taskId: string) => {
+    queue.pauseTask(taskId)
+    broadcastTasks()
+  })
+
+  ipcMain.handle('queue:resumeTask', async (_e, taskId: string) => {
+    queue.resumeTask(taskId)
+    broadcastTasks()
+  })
+
+  ipcMain.handle('queue:moveTask', async (_e, taskId: string, direction: 'up' | 'down') => {
+    queue.moveTask(taskId, direction)
+    broadcastTasks()
+  })
+
+  ipcMain.handle('queue:retryTask', async (_e, taskId: string) => {
+    queue.retryTask(taskId)
+    broadcastTasks()
+  })
+
+  ipcMain.handle('queue:retryAllFailed', async () => {
+    const n = queue.retryAllFailed()
+    broadcastTasks()
+    return n
   })
 
   ipcMain.handle('queue:list', async () => queue.listTasks())

@@ -1,7 +1,7 @@
 import { useMemo, useState, type JSX } from 'react'
 import type { QueueTask } from '../lib/api'
 
-const ACTIVE = new Set(['queued', 'resolving', 'downloading'])
+const ACTIVE = new Set(['queued', 'resolving', 'downloading', 'paused'])
 
 function isActive(t: QueueTask): boolean {
   return ACTIVE.has(t.status)

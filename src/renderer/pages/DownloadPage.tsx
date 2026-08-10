@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useState, type DragEvent, type JSX } from 'react'
 import ResourceDrawer, { listItems } from '../components/ResourceDrawer'
 import QueueTaskRow from '../components/QueueTaskRow'
 import ExtractZipModal from '../components/ExtractZipModal'
@@ -26,6 +26,17 @@ function defaultIds(manifest: ResourceManifest): string[] {
   return manifest.groups.post.map((i) => i.id)
 }
 
+function extractUrlsFromDrop(e: DragEvent): string[] {
+  const uriList = e.dataTransfer.getData('text/uri-list')
+  const plain = e.dataTransfer.getData('text/plain')
+  const raw = [uriList, plain].filter(Boolean).join('\n')
+  const found = raw
+    .split(/[\r\n\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^https?:\/\//i.test(s))
+  return [...new Set(found)]
+}
+
 export default function DownloadPage(): JSX.Element {
   const toast = useToast()
   const [source, setSource] = useState<DownloadSource>('xchina')
@@ -33,11 +44,14 @@ export default function DownloadPage(): JSX.Element {
   const [tasks, setTasks] = useState<QueueTask[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
   const [manifest, setManifest] = useState<ResourceManifest | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [askExtract, setAskExtract] = useState<AskExtract | null>(null)
   const [extractBusy, setExtractBusy] = useState(false)
   const [extractError, setExtractError] = useState('')
+
+  const failedCount = tasks.filter((t) => t.status === 'failed').length
 
   useEffect(() => {
     void api.listTasks().then(setTasks)
@@ -82,6 +96,33 @@ export default function DownloadPage(): JSX.Element {
       setSelected(new Set(defaultIds(m)))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleUrlDrop(e: DragEvent): Promise<void> {
+    e.preventDefault()
+    setDragOver(false)
+    const urls = extractUrlsFromDrop(e)
+    if (urls.length === 0) {
+      toast.info('未识别到链接，请拖入 http(s) URL')
+      return
+    }
+    if (source === 'telegram' || source === 'telegraph') {
+      setText((prev) => (prev.trim() ? `${prev.trim()}\n${urls.join('\n')}` : urls.join('\n')))
+      toast.info('已填入链接，请点击「解析资源」勾选后下载')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await api.enqueueUrls(source, urls)
+      toast.success(urls.length > 1 ? `已入队 ${urls.length} 条` : '已加入下载队列')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -153,10 +194,24 @@ export default function DownloadPage(): JSX.Element {
   }
 
   return (
-    <section className="page download-page">
+    <section
+      className={`page download-page${dragOver ? ' drop-active' : ''}`}
+      onDragEnter={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragOver(false)
+      }}
+      onDrop={(e) => void handleUrlDrop(e)}
+    >
       <h2 className="page-title">下载</h2>
       <p className="muted field-hint">
-        先选择来源，再粘贴对应链接。Telegram / Telegraph 解析后在右侧抽屉勾选资源。
+        先选择来源，再粘贴或拖入对应链接。Telegram / Telegraph 解析后在右侧抽屉勾选资源。
       </p>
 
       <div className="source-seg" role="tablist" aria-label="下载来源">
@@ -183,7 +238,7 @@ export default function DownloadPage(): JSX.Element {
         rows={5}
         placeholder={
           source === 'xchina'
-            ? 'https://xchina.co/photo/id-xxxxxxxx.html'
+            ? 'https://xchina.co/photo/id-xxxxxxxx.html\n也可直接拖入链接'
             : source === 'telegram'
               ? 'https://t.me/channel/123\n可粘贴多条，合并为一套图'
               : 'https://telegra.ph/Article-01-01'
@@ -196,17 +251,40 @@ export default function DownloadPage(): JSX.Element {
         <button type="button" className="btn primary" disabled={busy} onClick={() => void parseUrls()}>
           {source === 'xchina' ? '开始下载' : '解析资源'}
         </button>
+        {failedCount > 0 ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => {
+              void api.retryAllFailed().then((n) => {
+                toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
+              })
+            }}
+          >
+            重试全部失败（{failedCount}）
+          </button>
+        ) : null}
       </div>
       {error ? <p className="error-text">{error}</p> : null}
+      {dragOver ? <p className="drop-hint">松开以加入下载</p> : null}
 
       <h3 className="page-subtitle">队列</h3>
       <ul className="task-list">
         {tasks.map((t) => (
-          <QueueTaskRow key={t.id} task={t} onCancel={(id) => void api.cancelTask(id)} />
+          <QueueTaskRow
+            key={t.id}
+            task={t}
+            onCancel={(id) => void api.cancelTask(id)}
+            onPause={(id) => void api.pauseTask(id)}
+            onResume={(id) => void api.resumeTask(id)}
+            onMove={(id, dir) => void api.moveTask(id, dir)}
+            onRetry={(id) => void api.retryTask(id)}
+          />
         ))}
       </ul>
       {tasks.length === 0 ? (
-        <p className="empty-hint">队列为空。选择来源并粘贴链接开始下载。</p>
+        <p className="empty-hint">队列为空。选择来源并粘贴或拖入链接开始下载。</p>
       ) : null}
 
       {manifest ? (

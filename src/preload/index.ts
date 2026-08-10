@@ -72,6 +72,13 @@ const api = {
     ipcRenderer.invoke('library:setCover', source, id, relativePath),
   redownloadGallery: (sourceUrl: string): Promise<QueueTask[]> =>
     ipcRenderer.invoke('library:redownload', sourceUrl),
+  importLocalFolders: (
+    paths: string[],
+  ): Promise<{
+    imported: number
+    skipped: string[]
+    galleries: Array<{ source: string; galleryId: string; title: string; imageCount: number }>
+  }> => ipcRenderer.invoke('library:importLocalFolders', paths),
   extractZip: (payload: {
     zipPath: string
     deleteZip?: boolean
@@ -98,6 +105,15 @@ const api = {
     ipcRenderer.invoke('queue:enqueueSelected', manifestId, selectedIds, overwrite),
   cancelTask: (taskId: string): Promise<void> =>
     ipcRenderer.invoke('queue:cancel', taskId),
+  pauseTask: (taskId: string): Promise<void> =>
+    ipcRenderer.invoke('queue:pauseTask', taskId),
+  resumeTask: (taskId: string): Promise<void> =>
+    ipcRenderer.invoke('queue:resumeTask', taskId),
+  moveTask: (taskId: string, direction: 'up' | 'down'): Promise<void> =>
+    ipcRenderer.invoke('queue:moveTask', taskId, direction),
+  retryTask: (taskId: string): Promise<void> =>
+    ipcRenderer.invoke('queue:retryTask', taskId),
+  retryAllFailed: (): Promise<number> => ipcRenderer.invoke('queue:retryAllFailed'),
   listTasks: (): Promise<QueueTask[]> => ipcRenderer.invoke('queue:list'),
   classifyUrls: (
     urls: string[],

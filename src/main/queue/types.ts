@@ -2,6 +2,7 @@ export type QueueTaskStatus =
   | 'queued'
   | 'resolving'
   | 'downloading'
+  | 'paused'
   | 'completed'
   | 'failed'
   | 'skipped'

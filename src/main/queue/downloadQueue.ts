@@ -45,6 +45,7 @@ export class DownloadQueue extends EventEmitter {
   private paused = false
   private abortControllers = new Map<string, AbortController>()
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  private pauseIntent = new Set<string>()
 
   constructor(private readonly opts: DownloadQueueOptions) {
     super()
@@ -182,13 +183,96 @@ export class DownloadQueue extends EventEmitter {
   cancel(taskId: string): void {
     const task = this.tasks.find((t) => t.id === taskId)
     if (!task) return
-    if (task.status === 'queued') {
+    this.pauseIntent.delete(taskId)
+    if (task.status === 'queued' || task.status === 'paused') {
       this.patch(taskId, { status: 'cancelled' })
     } else if (task.status === 'resolving' || task.status === 'downloading') {
       this.abortControllers.get(taskId)?.abort()
       this.patch(taskId, { status: 'cancelled', error: '已取消' })
     }
     this.emitUpdate()
+  }
+
+  pauseTask(taskId: string): void {
+    const task = this.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    if (task.status === 'queued') {
+      this.patch(taskId, { status: 'paused' })
+      this.emitUpdate()
+      return
+    }
+    if (task.status === 'resolving' || task.status === 'downloading') {
+      this.pauseIntent.add(taskId)
+      this.abortControllers.get(taskId)?.abort()
+      this.patch(taskId, { status: 'paused', error: undefined })
+      this.emitUpdate()
+    }
+  }
+
+  resumeTask(taskId: string): void {
+    const task = this.tasks.find((t) => t.id === taskId)
+    if (!task || task.status !== 'paused') return
+    this.pauseIntent.delete(taskId)
+    this.patch(taskId, { status: 'queued', error: undefined })
+    this.emitUpdate()
+    void this.pump()
+  }
+
+  moveTask(taskId: string, direction: 'up' | 'down'): void {
+    const idx = this.tasks.findIndex((t) => t.id === taskId)
+    if (idx < 0) return
+    const task = this.tasks[idx]
+    if (!task || (task.status !== 'queued' && task.status !== 'paused')) return
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1
+    if (swapWith < 0 || swapWith >= this.tasks.length) return
+    const other = this.tasks[swapWith]
+    if (!other || (other.status !== 'queued' && other.status !== 'paused')) return
+    this.tasks[idx] = other
+    this.tasks[swapWith] = task
+    this.emitUpdate()
+  }
+
+  retryTask(taskId: string): void {
+    const task = this.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    if (task.status !== 'failed' && task.status !== 'cancelled') return
+    this.patch(taskId, {
+      status: 'queued',
+      error: undefined,
+      done: 0,
+      percent: 0,
+      bytesReceived: undefined,
+      bytesTotal: undefined,
+      bytesPerSec: undefined,
+      etaSec: undefined,
+      files: undefined,
+    })
+    this.emitUpdate()
+    void this.pump()
+  }
+
+  retryAllFailed(): number {
+    let n = 0
+    for (const t of this.tasks) {
+      if (t.status !== 'failed') continue
+      this.patch(t.id, {
+        status: 'queued',
+        error: undefined,
+        done: 0,
+        percent: 0,
+        bytesReceived: undefined,
+        bytesTotal: undefined,
+        bytesPerSec: undefined,
+        etaSec: undefined,
+        files: undefined,
+      })
+      n += 1
+    }
+    if (n > 0) {
+      this.emitUpdate()
+      void this.pump()
+    }
+    return n
   }
 
   pause(): void {
@@ -340,7 +424,12 @@ export class DownloadQueue extends EventEmitter {
       })
 
       if (ac.signal.aborted) {
-        this.patch(task.id, { status: 'cancelled', error: '已取消' })
+        if (this.pauseIntent.has(task.id) || this.tasks.find((t) => t.id === task.id)?.status === 'paused') {
+          this.pauseIntent.delete(task.id)
+          this.patch(task.id, { status: 'paused', error: undefined })
+        } else {
+          this.patch(task.id, { status: 'cancelled', error: '已取消' })
+        }
         this.emitUpdate()
         return
       }
@@ -549,6 +638,17 @@ export class DownloadQueue extends EventEmitter {
   }
 
   private handleTaskError(taskId: string, ac: AbortController, err: unknown): void {
+    if (this.pauseIntent.has(taskId)) {
+      this.pauseIntent.delete(taskId)
+      this.patch(taskId, { status: 'paused', error: undefined })
+      this.emitUpdate()
+      return
+    }
+    const current = this.tasks.find((t) => t.id === taskId)
+    if (current?.status === 'paused') {
+      this.emitUpdate()
+      return
+    }
     if (ac.signal.aborted || (err instanceof Error && err.message === '已取消')) {
       this.patch(taskId, { status: 'cancelled', error: '已取消' })
     } else if (err instanceof GalleryExistsError) {

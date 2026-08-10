@@ -670,6 +670,37 @@ textarea {
   box-shadow: 0 1px 0 color-mix(in srgb, #1a1f1e 3%, transparent);
 }
 
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.task-item.status-paused {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.task-item.status-failed .error-text {
+  display: block;
+  margin-top: 2px;
+}
+
+.page.drop-active {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -6px;
+}
+
+.drop-hint {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
 .task-main {
   display: grid;
   gap: 6px;

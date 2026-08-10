@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type DragEvent,
+  type JSX,
+  type MouseEvent,
+} from 'react'
 import GalleryCard from '../components/GalleryCard'
 import GalleryListRow from '../components/GalleryListRow'
 import ContextMenu from '../components/ContextMenu'
@@ -21,7 +29,7 @@ interface Props {
 type LibraryView = 'grid-comfy' | 'grid-compact' | 'grid-large' | 'list'
 
 const VIEW_KEY = 'wallpaper-runner:libraryView'
-const SOURCE_OPTIONS = ['xchina', 'telegram', 'telegraph'] as const
+const SOURCE_OPTIONS = ['xchina', 'telegram', 'telegraph', 'local'] as const
 
 function keyOf(e: LibraryIndexEntry): string {
   return `${e.source}:${e.galleryId}`
@@ -70,6 +78,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   const [joinLists, setJoinLists] = useState<
     Array<{ id: string; name: string; galleryRefs: Array<{ source: string; galleryId: string }> }>
   >([])
+  const [folderDragOver, setFolderDragOver] = useState(false)
 
   const reload = useCallback(
     (opts?: { silent?: boolean }) => {
@@ -213,6 +222,30 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     setJoinRefs(entries)
   }
 
+  async function handleFolderDrop(e: DragEvent): Promise<void> {
+    e.preventDefault()
+    setFolderDragOver(false)
+    const files = Array.from(e.dataTransfer.files ?? [])
+    const paths = files
+      .map((f) => (f as File & { path?: string }).path)
+      .filter((p): p is string => Boolean(p))
+    if (paths.length === 0) {
+      toast.info('请拖入本地文件夹（需 Electron 路径）')
+      return
+    }
+    try {
+      const result = await api.importLocalFolders(paths)
+      if (result.imported > 0) {
+        toast.success(`已导入 ${result.imported} 套本地图集`)
+        reload()
+      } else {
+        toast.info('未找到可导入的图片文件夹')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   async function onMenuSelect(id: string): Promise<void> {
     const entry = menu?.entry
     if (id === 'cleanup') {
@@ -247,7 +280,23 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
   }
 
   return (
-    <section className="page library-page" onContextMenu={openBlankMenu}>
+    <section
+      className={`page library-page${folderDragOver ? ' drop-active' : ''}`}
+      onContextMenu={openBlankMenu}
+      onDragEnter={(e) => {
+        e.preventDefault()
+        setFolderDragOver(true)
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setFolderDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setFolderDragOver(false)
+      }}
+      onDrop={(e) => void handleFolderDrop(e)}
+    >
+      {folderDragOver ? <p className="drop-hint">松开以导入本地文件夹</p> : null}
       <div className="page-toolbar wrap">
         <input
           className="search-input"

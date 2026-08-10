@@ -18,7 +18,7 @@ import { normalizeTasksForRestore, trimTerminalTasks } from '@main/queue/persist
 import type { QueueTask } from '@main/queue/types'
 
 describe('queue persist helpers', () => {
-  it('normalizeTasksForRestore resets downloading and resolving to queued', () => {
+  it('normalizeTasksForRestore resets downloading, resolving and paused to queued', () => {
     const now = new Date().toISOString()
     const tasks: QueueTask[] = [
       {
@@ -48,9 +48,18 @@ describe('queue persist helpers', () => {
         createdAt: now,
         updatedAt: now,
       },
+      {
+        id: 'd',
+        url: 'https://p',
+        status: 'paused',
+        done: 0,
+        total: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
     ]
     const next = normalizeTasksForRestore(tasks)
-    expect(next.map((t) => t.status)).toEqual(['queued', 'queued', 'queued'])
+    expect(next.map((t) => t.status)).toEqual(['queued', 'queued', 'queued', 'queued'])
   })
 
   it('trimTerminalTasks keeps last N terminal tasks', () => {
@@ -164,5 +173,44 @@ describe('DownloadQueue', () => {
     expect(tasks).toHaveLength(1)
     expect(tasks[0]?.status).toBe('queued')
     expect(tasks[0]?.url).toBe('https://fake.test/gallery')
+  })
+
+  it('pause/resume queued tasks, move, and retry failed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'q-ctrl-'))
+    dirs.push(root)
+    const store = new LibraryStore(root)
+    const queue = new DownloadQueue({ store, imageConcurrency: 1 })
+    queue.pause()
+
+    const [a, b] = queue.enqueue(['https://a.example/1', 'https://b.example/2'])
+    expect(a?.status).toBe('queued')
+    expect(b?.status).toBe('queued')
+
+    queue.pauseTask(a!.id)
+    expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('paused')
+
+    queue.moveTask(b!.id, 'up')
+    const ordered = queue.listTasks().map((t) => t.id)
+    expect(ordered.indexOf(b!.id)).toBeLessThan(ordered.indexOf(a!.id))
+
+    queue.resumeTask(a!.id)
+    expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('queued')
+
+    await new Promise<void>((resolve) => {
+      queue.on('idle', () => resolve())
+      queue.resume()
+    })
+
+    expect(queue.listTasks().every((t) => t.status === 'failed')).toBe(true)
+
+    queue.pause()
+    const n = queue.retryAllFailed()
+    expect(n).toBe(2)
+    expect(queue.listTasks().every((t) => t.status === 'queued')).toBe(true)
+
+    queue.cancel(a!.id)
+    expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('cancelled')
+    queue.retryTask(a!.id)
+    expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('queued')
   })
 })
