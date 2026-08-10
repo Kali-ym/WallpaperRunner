@@ -18,22 +18,22 @@ function mimeFromPath(filePath: string): string {
 }
 
 /**
- * Resolve a cached JPEG thumbnail for a library cover image.
+ * Resolve a cached JPEG thumbnail for any library image.
  * Falls back to the original when the image is already small or cannot be decoded.
  */
-export async function resolveCoverThumb(
+export async function resolveThumb(
   libraryRoot: string,
-  absCoverPath: string,
+  absImagePath: string,
 ): Promise<{ absPath: string; mime: string }> {
   let st: { mtimeMs: number; size: number }
   try {
-    st = await stat(absCoverPath)
+    st = await stat(absImagePath)
   } catch {
-    throw new Error('cover missing')
+    throw new Error('image missing')
   }
 
   const key = createHash('sha1')
-    .update(`${absCoverPath}|${st.mtimeMs}|${st.size}|${THUMB_MAX_EDGE}`)
+    .update(`${absImagePath}|${st.mtimeMs}|${st.size}|${THUMB_MAX_EDGE}`)
     .digest('hex')
     .slice(0, 20)
   const thumbDir = join(libraryRoot, '.thumbs')
@@ -50,14 +50,14 @@ export async function resolveCoverThumb(
   if (existing) return existing
 
   const job = (async () => {
-    const src = await readFile(absCoverPath)
+    const src = await readFile(absImagePath)
     const img = nativeImage.createFromBuffer(src)
     if (img.isEmpty()) {
-      return { absPath: absCoverPath, mime: mimeFromPath(absCoverPath) }
+      return { absPath: absImagePath, mime: mimeFromPath(absImagePath) }
     }
     const { width, height } = img.getSize()
     if (width <= THUMB_MAX_EDGE && height <= THUMB_MAX_EDGE) {
-      return { absPath: absCoverPath, mime: mimeFromPath(absCoverPath) }
+      return { absPath: absImagePath, mime: mimeFromPath(absImagePath) }
     }
     const scale = THUMB_MAX_EDGE / Math.max(width, height)
     const resized = img.resize({
@@ -76,3 +76,7 @@ export async function resolveCoverThumb(
   inflight.set(thumbPath, job)
   return job
 }
+
+/** @deprecated alias — cover cards */
+export const resolveCoverThumb = resolveThumb
+

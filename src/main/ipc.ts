@@ -15,7 +15,7 @@ import {
 } from './library/extractZipGallery'
 import { putResourceManifest } from './resources/session'
 import type { ResourceManifest } from './resources/types'
-import { resolveCoverThumb } from './library/thumbnails'
+import { resolveThumb } from './library/thumbnails'
 
 export type AskExtractPayload = {
   taskId: string
@@ -207,7 +207,7 @@ export function registerProtocols(): void {
 
       if (wantThumb) {
         try {
-          const thumb = await resolveCoverThumb(root, abs)
+          const thumb = await resolveThumb(root, abs)
           filePath = thumb.absPath
           type = thumb.mime
         } catch {

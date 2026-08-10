@@ -313,7 +313,11 @@ export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.El
                       <span className="archive-ext">{img.split('.').pop()?.toUpperCase()}</span>
                     </div>
                   ) : (
-                    <img src={api.getMediaUrl(entry.dirName, img)} alt={img} loading="lazy" />
+                    <img
+                      src={api.getMediaUrl(entry.dirName, img, { thumb: true })}
+                      alt={img}
+                      loading="lazy"
+                    />
                   )}
                   <span className="thumb-caption">{img}</span>
                   {!archive && meta.cover === img ? (
