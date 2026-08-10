@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -146,5 +146,36 @@ describe('LibraryStore', () => {
     expect(n).toBe(1)
     const meta = await store.getGallery('telegram', 'b')
     expect(meta?.tags.map((t) => t.toLowerCase()).sort()).toEqual(['jk', '街拍'])
+  })
+
+  it('finds duplicates by cover fingerprint', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'gal-dup-'))
+    dirs.push(root)
+    const store = new LibraryStore(root)
+    const bytes = Buffer.from('dup-cover-bytes')
+
+    async function seed(id: string, title: string): Promise<void> {
+      const dir = store.resolveGalleryDir('local', id, title)
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, '001.jpg'), bytes)
+      await store.upsertGallery({
+        source: 'local',
+        galleryId: id,
+        title,
+        sourceUrl: `file://${dir}`,
+        author: '',
+        tags: [],
+        pageCount: 1,
+        cover: '001.jpg',
+        images: ['001.jpg'],
+        downloadedAt: new Date().toISOString(),
+      })
+    }
+
+    await seed('g1', '一套')
+    await seed('g2', '二套')
+    const groups = await store.findDuplicates()
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.galleries).toHaveLength(2)
   })
 })

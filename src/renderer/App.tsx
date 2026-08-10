@@ -207,7 +207,18 @@ function AppShell(): JSX.Element {
           hidden={Boolean(active) || tab !== 'library'}
           style={{ display: active || tab !== 'library' ? 'none' : undefined }}
         >
-          <LibraryPage onOpenGallery={setActive} />
+          <LibraryPage
+            onOpenGallery={(entry) => {
+              setActive(entry)
+              void api.recordBrowse({
+                source: entry.source,
+                galleryId: entry.galleryId,
+                title: entry.displayTitle || entry.title,
+                dirName: entry.dirName,
+                cover: entry.cover,
+              })
+            }}
+          />
         </div>
         <div
           className="tab-panel"

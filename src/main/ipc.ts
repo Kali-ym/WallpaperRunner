@@ -29,6 +29,7 @@ export type AskExtractPayload = {
 import { setHttpFetch, setHttpProxy, setPreferCurl } from './http/client'
 import { LibraryStore } from './library/store'
 import { PlaylistStore } from './library/playlists'
+import { HistoryStore } from './library/history'
 import { importLocalFolders } from './library/importLocalFolders'
 import { DownloadQueue } from './queue/downloadQueue'
 import { loadSettings, saveSettings, type AppSettings } from './settings'
@@ -48,6 +49,7 @@ import {
 
 let store: LibraryStore
 let playlistStore: PlaylistStore
+let historyStore: HistoryStore
 let queue: DownloadQueue
 let settings: AppSettings
 let wallpaperSyncTimer: ReturnType<typeof setTimeout> | null = null
@@ -166,6 +168,7 @@ export async function initAppServices(): Promise<void> {
   registerAdapter(telegraphAdapter)
   settings = await loadSettings()
   await applyNetwork(settings.proxyUrl)
+  historyStore = new HistoryStore(join(app.getPath('userData'), 'history.json'))
   bindLibraryStore(new LibraryStore(settings.downloadRoot))
   await store.ensureRoot()
   rebuildQueue()
@@ -479,6 +482,30 @@ export function registerIpc(): void {
     broadcastTasks()
     return tasks
   })
+
+  ipcMain.handle('library:findDuplicates', async () => store.findDuplicates())
+
+  ipcMain.handle('library:scanFingerprints', async () => store.scanFingerprints())
+
+  ipcMain.handle('history:get', async () => historyStore.get())
+
+  ipcMain.handle(
+    'history:recordBrowse',
+    async (
+      _e,
+      ref: {
+        source: string
+        galleryId: string
+        title?: string
+        dirName?: string
+        cover?: string | null
+      },
+    ) => historyStore.recordBrowse(ref),
+  )
+
+  ipcMain.handle('history:recordSearch', async (_e, query: string) =>
+    historyStore.recordSearch(String(query ?? '')),
+  )
 
   ipcMain.handle('library:importLocalFolders', async (_e, paths: string[]) => {
     if (!Array.isArray(paths) || paths.length === 0) {

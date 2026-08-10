@@ -9,6 +9,7 @@ import {
   type LibraryFilters,
   type TagStat,
 } from './filters'
+import { fingerprintFile, groupDuplicatesByFingerprint } from './fingerprint'
 
 export type { LibraryFilters, TagStat } from './filters'
 
@@ -25,6 +26,8 @@ export interface GalleryMetadata {
   downloadedAt: string
   favorite?: boolean
   displayTitle?: string
+  /** SHA1 of cover/first image for duplicate detection. */
+  contentFingerprint?: string
 }
 
 export interface LibraryIndexEntry {
@@ -39,11 +42,17 @@ export interface LibraryIndexEntry {
   dirName: string
   downloadedAt: string
   favorite: boolean
+  contentFingerprint?: string
 }
 
 export interface GalleryRef {
   source: string
   galleryId: string
+}
+
+export type DuplicateGroup = {
+  fingerprint: string
+  galleries: LibraryIndexEntry[]
 }
 
 interface LibraryIndexFile {
@@ -68,6 +77,7 @@ function toIndexEntry(meta: GalleryMetadata, dirName: string): LibraryIndexEntry
     dirName,
     downloadedAt: meta.downloadedAt,
     favorite: Boolean(meta.favorite),
+    contentFingerprint: meta.contentFingerprint,
   }
 }
 
@@ -164,10 +174,20 @@ export class LibraryStore extends EventEmitter {
       ...meta,
       favorite: meta.favorite ?? prev?.favorite ?? false,
       displayTitle: meta.displayTitle ?? prev?.displayTitle,
+      contentFingerprint: meta.contentFingerprint ?? prev?.contentFingerprint,
     }
 
     const dirName =
       existing?.dirName ?? galleryFolderName(merged.source, merged.galleryId, merged.title)
+
+    if (!merged.contentFingerprint) {
+      const coverRel = merged.cover || merged.images[0]
+      if (coverRel) {
+        const fp = await fingerprintFile(join(this.rootDir, dirName, coverRel))
+        if (fp) merged.contentFingerprint = fp
+      }
+    }
+
     await this.writeMetaAt(dirName, merged)
 
     const entries = await this.loadIndex()
@@ -351,11 +371,67 @@ export class LibraryStore extends EventEmitter {
     if (!meta) throw new Error('元数据缺失')
     if (!meta.images.includes(relativePath)) throw new Error('封面必须是套图内图片')
     meta.cover = relativePath
+    const fp = await fingerprintFile(join(this.rootDir, hit.dirName, relativePath))
+    if (fp) meta.contentFingerprint = fp
     await this.writeMetaAt(hit.dirName, meta)
     const entries = await this.loadIndex()
     const idx = entries.findIndex((e) => e.source === source && e.galleryId === galleryId)
     if (idx >= 0) entries[idx] = toIndexEntry(meta, hit.dirName)
     await this.saveIndex(entries)
     return meta
+  }
+
+  /** Compute missing fingerprints; returns number updated. */
+  async scanFingerprints(): Promise<number> {
+    const entries = await this.loadIndex()
+    let n = 0
+    let indexDirty = false
+    for (const e of entries) {
+      const meta = await this.readMetaAt(e.dirName)
+      if (!meta) continue
+      if (meta.contentFingerprint) {
+        if (e.contentFingerprint !== meta.contentFingerprint) {
+          const idx = entries.findIndex(
+            (x) => x.source === e.source && x.galleryId === e.galleryId,
+          )
+          if (idx >= 0) {
+            entries[idx] = toIndexEntry(meta, e.dirName)
+            indexDirty = true
+          }
+        }
+        continue
+      }
+      const coverRel = meta.cover || meta.images[0]
+      if (!coverRel) continue
+      const fp = await fingerprintFile(join(this.rootDir, e.dirName, coverRel))
+      if (!fp) continue
+      meta.contentFingerprint = fp
+      await this.writeMetaAt(e.dirName, meta)
+      const idx = entries.findIndex((x) => x.source === e.source && x.galleryId === e.galleryId)
+      if (idx >= 0) entries[idx] = toIndexEntry(meta, e.dirName)
+      n += 1
+      indexDirty = true
+    }
+    if (indexDirty) await this.saveIndex(entries)
+    return n
+  }
+
+  async findDuplicates(): Promise<DuplicateGroup[]> {
+    await this.scanFingerprints()
+    const entries = await this.loadIndex()
+    const withFp: Array<LibraryIndexEntry & { contentFingerprint: string }> = []
+    for (const e of entries) {
+      let fp = e.contentFingerprint
+      if (!fp) {
+        const meta = await this.readMetaAt(e.dirName)
+        fp = meta?.contentFingerprint
+      }
+      if (!fp) continue
+      withFp.push({ ...e, contentFingerprint: fp })
+    }
+    return groupDuplicatesByFingerprint(withFp).map((g) => ({
+      fingerprint: g.fingerprint,
+      galleries: g.items,
+    }))
   }
 }

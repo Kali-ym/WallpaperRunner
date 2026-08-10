@@ -72,6 +72,30 @@ const api = {
     ipcRenderer.invoke('library:setCover', source, id, relativePath),
   redownloadGallery: (sourceUrl: string): Promise<QueueTask[]> =>
     ipcRenderer.invoke('library:redownload', sourceUrl),
+  findDuplicates: (): Promise<
+    Array<{ fingerprint: string; galleries: LibraryIndexEntry[] }>
+  > => ipcRenderer.invoke('library:findDuplicates'),
+  scanFingerprints: (): Promise<number> => ipcRenderer.invoke('library:scanFingerprints'),
+  getHistory: (): Promise<{
+    browsed: Array<{
+      source: string
+      galleryId: string
+      title?: string
+      dirName?: string
+      cover?: string | null
+      at: string
+    }>
+    searches: string[]
+  }> => ipcRenderer.invoke('history:get'),
+  recordBrowse: (ref: {
+    source: string
+    galleryId: string
+    title?: string
+    dirName?: string
+    cover?: string | null
+  }): Promise<unknown> => ipcRenderer.invoke('history:recordBrowse', ref),
+  recordSearch: (query: string): Promise<unknown> =>
+    ipcRenderer.invoke('history:recordSearch', query),
   importLocalFolders: (
     paths: string[],
   ): Promise<{

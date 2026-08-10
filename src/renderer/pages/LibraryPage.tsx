@@ -9,6 +9,7 @@ import {
 } from 'react'
 import GalleryCard from '../components/GalleryCard'
 import GalleryListRow from '../components/GalleryListRow'
+import VirtualGalleryGrid from '../components/VirtualGalleryGrid'
 import ContextMenu from '../components/ContextMenu'
 import EditMetadataModal from '../components/EditMetadataModal'
 import JoinPlaylistModal from '../components/JoinPlaylistModal'
@@ -79,14 +80,43 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     Array<{ id: string; name: string; galleryRefs: Array<{ source: string; galleryId: string }> }>
   >([])
   const [folderDragOver, setFolderDragOver] = useState(false)
+  const [recentBrowse, setRecentBrowse] = useState<
+    Array<{
+      source: string
+      galleryId: string
+      title?: string
+      dirName?: string
+      cover?: string | null
+      at: string
+    }>
+  >([])
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [recentDownloaded, setRecentDownloaded] = useState<LibraryIndexEntry[]>([])
+  const [dupGroups, setDupGroups] = useState<
+    Array<{ fingerprint: string; galleries: LibraryIndexEntry[] }>
+  >([])
+  const [showDups, setShowDups] = useState(false)
+  const [dupBusy, setDupBusy] = useState(false)
 
   const reload = useCallback(
     (opts?: { silent?: boolean }) => {
       if (!opts?.silent) setLoading(true)
-      void Promise.all([api.listLibrary(query, filters), api.tagStats()])
-        .then(([list, stats]) => {
+      void Promise.all([
+        api.listLibrary(query, filters),
+        api.tagStats(),
+        api.getHistory(),
+        api.listLibrary(''),
+      ])
+        .then(([list, stats, hist, all]) => {
           setItems(list)
           setTagStats(stats)
+          setRecentBrowse(hist.browsed.slice(0, 8))
+          setRecentSearches(hist.searches.slice(0, 8))
+          setRecentDownloaded(
+            [...all]
+              .sort((a, b) => b.downloadedAt.localeCompare(a.downloadedAt))
+              .slice(0, 8),
+          )
           setLoading(false)
         })
         .catch((err: unknown) => {
@@ -101,6 +131,18 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     const timer = setTimeout(() => reload(), 150)
     return () => clearTimeout(timer)
   }, [reload])
+
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) return
+    const timer = setTimeout(() => {
+      void api.recordSearch(q).then((h) => {
+        const hist = h as { searches?: string[] }
+        if (Array.isArray(hist.searches)) setRecentSearches(hist.searches.slice(0, 8))
+      })
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [query])
 
   useEffect(() => {
     return api.onLibraryChange(() => reload({ silent: true }))
@@ -246,6 +288,46 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
     }
   }
 
+  async function runFindDuplicates(): Promise<void> {
+    setDupBusy(true)
+    try {
+      const groups = await api.findDuplicates()
+      setDupGroups(groups)
+      setShowDups(true)
+      toast.success(groups.length ? `发现 ${groups.length} 组重复` : '未发现重复套图')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDupBusy(false)
+    }
+  }
+
+  function resolveBrowseEntry(ref: {
+    source: string
+    galleryId: string
+    title?: string
+    dirName?: string
+    cover?: string | null
+  }): LibraryIndexEntry | null {
+    const hit =
+      recentDownloaded.find((e) => e.source === ref.source && e.galleryId === ref.galleryId) ||
+      items.find((e) => e.source === ref.source && e.galleryId === ref.galleryId)
+    if (hit) return hit
+    if (!ref.dirName) return null
+    return {
+      source: ref.source,
+      galleryId: ref.galleryId,
+      title: ref.title || ref.galleryId,
+      author: '',
+      tags: [],
+      cover: ref.cover ?? null,
+      imageCount: 0,
+      dirName: ref.dirName,
+      downloadedAt: '',
+      favorite: false,
+    }
+  }
+
   async function onMenuSelect(id: string): Promise<void> {
     const entry = menu?.entry
     if (id === 'cleanup') {
@@ -297,6 +379,48 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
       onDrop={(e) => void handleFolderDrop(e)}
     >
       {folderDragOver ? <p className="drop-hint">松开以导入本地文件夹</p> : null}
+      {(recentBrowse.length > 0 || recentDownloaded.length > 0) && (
+        <div className="recent-strip">
+          {recentBrowse.length > 0 ? (
+            <div className="recent-row">
+              <span className="muted recent-label">最近浏览</span>
+              <div className="recent-chips">
+                {recentBrowse.map((b) => {
+                  const entry = resolveBrowseEntry(b)
+                  if (!entry) return null
+                  return (
+                    <button
+                      key={`${b.source}:${b.galleryId}:${b.at}`}
+                      type="button"
+                      className="chip"
+                      onClick={() => onOpenGallery(entry)}
+                    >
+                      {b.title || entry.displayTitle || entry.title}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+          {recentDownloaded.length > 0 ? (
+            <div className="recent-row">
+              <span className="muted recent-label">最近下载</span>
+              <div className="recent-chips">
+                {recentDownloaded.map((e) => (
+                  <button
+                    key={`dl:${keyOf(e)}`}
+                    type="button"
+                    className="chip"
+                    onClick={() => onOpenGallery(e)}
+                  >
+                    {e.displayTitle || e.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="page-toolbar wrap">
         <input
           className="search-input"
@@ -305,6 +429,15 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {recentSearches.length > 0 ? (
+          <div className="recent-chips search-history">
+            {recentSearches.map((s) => (
+              <button key={s} type="button" className="chip tiny" onClick={() => setQuery(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="filter-chips" role="group" aria-label="来源">
           {SOURCE_OPTIONS.map((s) => (
             <button
@@ -390,6 +523,9 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
         </label>
         <button type="button" className="btn" onClick={clearFilters}>
           清除筛选
+        </button>
+        <button type="button" className="btn" disabled={dupBusy} onClick={() => void runFindDuplicates()}>
+          {dupBusy ? '查重中…' : '查找重复'}
         </button>
         <button type="button" className="btn" onClick={() => setSelectMode((v) => !v)}>
           {selectMode ? '取消多选' : '多选'}
@@ -587,9 +723,16 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
               ))}
             </div>
           ) : (
-            <div className="gallery-grid" data-density={density}>
-              {items.map((entry) => (
-                <div key={keyOf(entry)} onContextMenu={(e) => openCardMenu(e, entry)}>
+            <VirtualGalleryGrid
+              items={items}
+              density={density}
+              getKey={keyOf}
+              onOpenIndex={(i) => {
+                const entry = items[i]
+                if (entry) onOpenGallery(entry)
+              }}
+              renderItem={(entry) => (
+                <div onContextMenu={(e) => openCardMenu(e, entry)}>
                   <GalleryCard
                     entry={entry}
                     selectMode={selectMode}
@@ -599,9 +742,43 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
                     onToggleFavorite={(e) => patchFavorite(e, !e.favorite)}
                   />
                 </div>
-              ))}
-            </div>
+              )}
+            />
           )}
+          {showDups ? (
+            <div className="dup-panel">
+              <div className="dup-panel-head">
+                <h3 className="page-subtitle">重复套图</h3>
+                <button type="button" className="btn tiny" onClick={() => setShowDups(false)}>
+                  关闭
+                </button>
+              </div>
+              {dupGroups.length === 0 ? (
+                <p className="muted">未发现重复（按首图内容指纹）</p>
+              ) : (
+                dupGroups.map((g) => (
+                  <div key={g.fingerprint} className="dup-group">
+                    <p className="muted mono-num">
+                      {g.galleries.length} 套 · {g.fingerprint.slice(0, 10)}…
+                    </p>
+                    <div className="recent-chips">
+                      {g.galleries.map((e) => (
+                        <button
+                          key={keyOf(e)}
+                          type="button"
+                          className="chip"
+                          onClick={() => onOpenGallery(e)}
+                        >
+                          {e.displayTitle || e.title}
+                          <span className="muted"> · {e.source}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
