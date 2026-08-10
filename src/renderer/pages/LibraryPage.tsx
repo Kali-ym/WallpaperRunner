@@ -162,6 +162,7 @@ export default function LibraryPage({ onOpenGallery }: Props): JSX.Element {
       <div className="page-toolbar">
         <input
           className="search-input"
+          data-focus="library-search"
           placeholder="搜索标题 / 标签 / 模特"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

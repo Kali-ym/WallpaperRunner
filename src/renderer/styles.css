@@ -1542,3 +1542,33 @@ textarea {
 .error-boundary h2 {
   margin: 0;
 }
+
+.shortcut-help {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.shortcut-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcut-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shortcut-list kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 70%, var(--panel));
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

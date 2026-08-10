@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import LibraryPage from './pages/LibraryPage'
 import GalleryPage from './pages/GalleryPage'
 import DownloadPage from './pages/DownloadPage'
@@ -6,6 +6,7 @@ import SettingsPage from './pages/SettingsPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import ToastHost from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
+import ShortcutHelp from './components/ShortcutHelp'
 import { ToastProvider } from './lib/toast'
 import { api, type LibraryIndexEntry } from './lib/api'
 import {
@@ -17,10 +18,24 @@ import {
 
 type Tab = 'library' | 'playlists' | 'download' | 'settings'
 
+const TABS: Tab[] = ['library', 'playlists', 'download', 'settings']
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false
+  const tag = t.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return t.isContentEditable
+}
+
 function AppShell(): JSX.Element {
   const [tab, setTab] = useState<Tab>('library')
   const [active, setActive] = useState<LibraryIndexEntry | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('system')
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpOpenRef = useRef(helpOpen)
+  const activeRef = useRef(active)
+  helpOpenRef.current = helpOpen
+  activeRef.current = active
 
   useEffect(() => {
     void api.getSettings().then((s) => {
@@ -42,6 +57,53 @@ function AppShell(): JSX.Element {
     }
     window.addEventListener(THEME_CHANGED_EVENT, onTheme)
     return () => window.removeEventListener(THEME_CHANGED_EVENT, onTheme)
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (document.querySelector('.yarl__root')) return
+      if (isTypingTarget(e.target) && e.key !== 'Escape') return
+
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key >= '1' && e.key <= '4') {
+        e.preventDefault()
+        setActive(null)
+        setTab(TABS[Number(e.key) - 1]!)
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setActive(null)
+        setTab('library')
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>('[data-focus="library-search"]')?.focus()
+        })
+        return
+      }
+      if (mod && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        setActive(null)
+        setTab('download')
+        requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>('[data-focus="download-urls"]')?.focus()
+        })
+        return
+      }
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault()
+        setHelpOpen(true)
+        return
+      }
+      if (e.key === 'Escape') {
+        if (helpOpenRef.current) {
+          setHelpOpen(false)
+          return
+        }
+        if (activeRef.current) setActive(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   return (
@@ -132,6 +194,7 @@ function AppShell(): JSX.Element {
           <SettingsPage />
         </div>
       </main>
+      {helpOpen ? <ShortcutHelp onClose={() => setHelpOpen(false)} /> : null}
       <ToastHost />
     </div>
   )

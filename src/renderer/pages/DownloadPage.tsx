@@ -179,6 +179,7 @@ export default function DownloadPage(): JSX.Element {
 
       <textarea
         className="url-box"
+        data-focus="download-urls"
         rows={5}
         placeholder={
           source === 'xchina'
