@@ -2144,17 +2144,17 @@ input:focus-visible {
     linear-gradient(300deg, oklch(30% 0.1 220 / 0.45), oklch(16% 0.03 55));
 }
 
-/* —— 下载浮层（对齐真实 DownloadDock：摘要 + 细条 + 可展开列表） —— */
+/* —— 下载浮层（传输列表：收起摘要 / 展开任务行） —— */
 .dock {
   position: absolute;
   right: 16px;
   bottom: 16px;
-  width: min(320px, calc(100% - 32px));
-  border-radius: var(--radius, 12px);
+  width: min(360px, calc(100% - 32px));
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--surface) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: color-mix(in oklab, var(--surface) 96%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--shadow-soft);
   z-index: 40;
   display: none;
@@ -2166,19 +2166,20 @@ input:focus-visible {
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 11px 14px;
   border: 0;
   background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.84rem;
+  font-weight: 550;
   text-align: left;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
 .dock-toggle:hover { background: oklch(100% 0 0 / 0.03); }
-.dock-toggle > span:first-child {
+.dock-toggle-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2188,10 +2189,10 @@ input:focus-visible {
   color: var(--muted);
   flex-shrink: 0;
   line-height: 1;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 .dock-bar {
-  height: 3px;
+  height: 2px;
   background: color-mix(in oklab, var(--border) 70%, var(--bg));
 }
 .dock-bar > i {
@@ -2203,44 +2204,100 @@ input:focus-visible {
 }
 .dock-body {
   display: none;
-  padding: 8px 12px 12px;
   border-top: 1px solid var(--border);
 }
 .dock.expanded .dock-body { display: block; }
 .dock-list {
   list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
+  margin: 0;
+  padding: 6px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 180px;
+  max-height: 280px;
   overflow: auto;
 }
-.dock-list li {
+.dock-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
+}
+.dock-item:last-child { border-bottom: 0; }
+.dock-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.dock-item-main {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 2px 0;
+  gap: 3px;
 }
-.dock-list li:hover .dock-item-title { color: var(--accent); }
+.dock-item-source {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .dock-item-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg);
+  font-size: 0.84rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
 }
-.dock-item-status {
+.dock-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dock-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
   color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, color 0.12s;
 }
-.dock-body > .btn {
-  width: 100%;
-  justify-content: center;
+.dock-icon-btn svg { width: 15px; height: 15px; }
+.dock-icon-btn:hover {
+  background: var(--hover-fill);
+  color: var(--fg);
+}
+.dock-icon-btn.danger:hover {
+  background: color-mix(in oklab, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.dock-item-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 55%, var(--bg));
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.dock-item-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.dock-item.status-paused .dock-item-bar > i {
+  background: color-mix(in oklab, var(--muted) 70%, var(--accent));
+}
+.dock-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* —— 获取 / 设置 —— */
@@ -3409,8 +3466,8 @@ input:focus-visible {
   display: flex;
   gap: 8px;
   align-items: center;
-  width: min(100%, 460px);
-  justify-self: end;
+  width: 100%;
+  justify-self: stretch;
 }
 .path-row .text-input {
   flex: 1;
@@ -3452,7 +3509,7 @@ input:focus-visible {
   display: grid;
   gap: 14px;
   margin-bottom: 14px;
-  max-width: 640px;
+  width: 100%;
 }
 .tg-step {
   display: grid;
@@ -3466,6 +3523,8 @@ input:focus-visible {
 }
 .tg-step > div:nth-child(2) {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 .tg-step-n {
   width: 28px;
@@ -3497,14 +3556,17 @@ input:focus-visible {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 4px;
-}
-.tg-step .tg-fields .text-input {
   width: 100%;
-  max-width: 100%;
+  align-self: stretch;
 }
+.settings-body .pref-row.stack input.text-input,
+.tg-step .tg-fields .text-input,
 .tg-step .tg-phone-input {
+  display: block;
   width: 100%;
-  max-width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  field-sizing: fixed;
 }
 @media (max-width: 640px) {
   .tg-step .tg-fields { gap: 10px; }
@@ -4418,7 +4480,26 @@ html, body, #root {
   background: transparent;
   cursor: pointer;
 }
-.meta-readonly {
+.confirm-panel {
+  width: min(400px, calc(100vw - 32px));
+}
+.confirm-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.confirm-root .modal-actions {
+  margin-top: 4px;
+}
+.btn-primary.confirm-danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn-primary.confirm-danger:hover {
+  filter: brightness(1.08);
+}
+
   display: grid;
   gap: 4px;
   font-size: 0.85rem;

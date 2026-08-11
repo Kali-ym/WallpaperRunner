@@ -77,6 +77,3 @@ export async function resolveThumb(
   return job
 }
 
-/** @deprecated alias — cover cards */
-export const resolveCoverThumb = resolveThumb
-

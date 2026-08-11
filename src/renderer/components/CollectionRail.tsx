@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type MouseEvent } from 'react'
 import { api } from '../lib/api'
+import { useConfirm } from '../lib/confirm'
 import ContextMenu from './ContextMenu'
 
 export type BrowseSelection =
@@ -18,6 +19,7 @@ type Props = {
 }
 
 export default function CollectionRail({ selection, onSelect, onManagePlaylist }: Props): JSX.Element {
+  const confirm = useConfirm()
   const [authorCount, setAuthorCount] = useState(0)
   const [playlists, setPlaylists] = useState<PlaylistLite[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -109,7 +111,13 @@ export default function CollectionRail({ selection, onSelect, onManagePlaylist }
   }
 
   async function deletePlaylist(id: string, name: string): Promise<void> {
-    if (!window.confirm(`确定删除播放列表「${name}」？`)) return
+    const ok = await confirm({
+      title: '删除播放列表',
+      message: `确定删除播放列表「${name}」？`,
+      confirmLabel: '删除',
+      danger: true,
+    })
+    if (!ok) return
     await api.deletePlaylist(id)
     setPlaylists((prev) => prev.filter((p) => p.id !== id))
     if (selection.kind === 'playlist' && selection.id === id) {

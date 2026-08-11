@@ -3,15 +3,13 @@ import { mkdir, readdir, readFile, writeFile, access, rm, unlink } from 'node:fs
 import { join } from 'node:path'
 import { galleryFolderName } from './paths'
 import {
-  aggregateTagStats,
   aggregateAuthorStats,
   applyLibraryFilters,
   mergeTags,
   type LibraryFilters,
-  type TagStat,
   type AuthorStat,
 } from './filters'
-import { fingerprintFile, groupDuplicatesByFingerprint } from './fingerprint'
+import { fingerprintFile } from './fingerprint'
 
 export type { LibraryFilters, TagStat, AuthorStat } from './filters'
 
@@ -50,11 +48,6 @@ export interface LibraryIndexEntry {
 export interface GalleryRef {
   source: string
   galleryId: string
-}
-
-export type DuplicateGroup = {
-  fingerprint: string
-  galleries: LibraryIndexEntry[]
 }
 
 interface LibraryIndexFile {
@@ -205,11 +198,6 @@ export class LibraryStore extends EventEmitter {
   async search(query: string, opts?: LibraryFilters): Promise<LibraryIndexEntry[]> {
     const entries = await this.loadIndex()
     return applyLibraryFilters(entries, query, opts) as LibraryIndexEntry[]
-  }
-
-  async listTagStats(): Promise<TagStat[]> {
-    const entries = await this.loadIndex()
-    return aggregateTagStats(entries)
   }
 
   async listAuthorStats(): Promise<AuthorStat[]> {
@@ -413,59 +401,5 @@ export class LibraryStore extends EventEmitter {
     if (idx >= 0) entries[idx] = toIndexEntry(meta, hit.dirName)
     await this.saveIndex(entries)
     return meta
-  }
-
-  /** Compute missing fingerprints; returns number updated. */
-  async scanFingerprints(): Promise<number> {
-    const entries = await this.loadIndex()
-    let n = 0
-    let indexDirty = false
-    for (const e of entries) {
-      const meta = await this.readMetaAt(e.dirName)
-      if (!meta) continue
-      if (meta.contentFingerprint) {
-        if (e.contentFingerprint !== meta.contentFingerprint) {
-          const idx = entries.findIndex(
-            (x) => x.source === e.source && x.galleryId === e.galleryId,
-          )
-          if (idx >= 0) {
-            entries[idx] = toIndexEntry(meta, e.dirName)
-            indexDirty = true
-          }
-        }
-        continue
-      }
-      const coverRel = meta.cover || meta.images[0]
-      if (!coverRel) continue
-      const fp = await fingerprintFile(join(this.rootDir, e.dirName, coverRel))
-      if (!fp) continue
-      meta.contentFingerprint = fp
-      await this.writeMetaAt(e.dirName, meta)
-      const idx = entries.findIndex((x) => x.source === e.source && x.galleryId === e.galleryId)
-      if (idx >= 0) entries[idx] = toIndexEntry(meta, e.dirName)
-      n += 1
-      indexDirty = true
-    }
-    if (indexDirty) await this.saveIndex(entries)
-    return n
-  }
-
-  async findDuplicates(): Promise<DuplicateGroup[]> {
-    await this.scanFingerprints()
-    const entries = await this.loadIndex()
-    const withFp: Array<LibraryIndexEntry & { contentFingerprint: string }> = []
-    for (const e of entries) {
-      let fp = e.contentFingerprint
-      if (!fp) {
-        const meta = await this.readMetaAt(e.dirName)
-        fp = meta?.contentFingerprint
-      }
-      if (!fp) continue
-      withFp.push({ ...e, contentFingerprint: fp })
-    }
-    return groupDuplicatesByFingerprint(withFp).map((g) => ({
-      fingerprint: g.fingerprint,
-      galleries: g.items,
-    }))
   }
 }

@@ -11,6 +11,7 @@ import OnboardingModal from './components/OnboardingModal'
 import WindowControls from './components/WindowControls'
 import CollectionRail, { type BrowseSelection } from './components/CollectionRail'
 import { ToastProvider, useToast } from './lib/toast'
+import { ConfirmProvider } from './lib/confirm'
 import { api, type AppSettings, type LibraryIndexEntry, type QueueTask } from './lib/api'
 import {
   applyTheme,
@@ -345,13 +346,7 @@ function AppShell(): JSX.Element {
             <SettingsPage />
           </section>
 
-          <DownloadDock
-            tasks={tasks}
-            onOpenDownload={() => {
-              setActive(null)
-              setMode('acquire')
-            }}
-          />
+          <DownloadDock tasks={tasks} />
         </main>
       </div>
 
@@ -379,7 +374,9 @@ export default function App(): JSX.Element {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <AppShell />
+        <ConfirmProvider>
+          <AppShell />
+        </ConfirmProvider>
       </ToastProvider>
     </ErrorBoundary>
   )

@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { parseXchinaPage, upgradeThumbToOriginal } from '@main/adapters/xchina/parsePage'
 
 const fix = (name: string): string =>
-  readFileSync(path.join(__dirname, '../../fixtures/xchina', name), 'utf8')
+  readFileSync(path.join(__dirname, '../fixtures/xchina', name), 'utf8')
 
 describe('upgradeThumbToOriginal', () => {
   it('strips xchina size suffix to jpg', () => {

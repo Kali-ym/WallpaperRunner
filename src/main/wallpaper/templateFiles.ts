@@ -92,10 +92,6 @@ export function buildProjectJson(playlists: { id: string; name: string }[]): str
   return `${JSON.stringify(project, null, 2)}\n`
 }
 
-/** @deprecated Use buildProjectJson — kept for imports that expect a constant. */
-export const PROJECT_JSON = buildProjectJson([])
-
-
 export const INDEX_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

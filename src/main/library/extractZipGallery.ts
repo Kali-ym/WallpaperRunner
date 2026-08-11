@@ -112,14 +112,6 @@ export async function detectArchiveKind(path: string): Promise<ArchiveKind | nul
   }
 }
 
-export async function isZipFile(path: string): Promise<boolean> {
-  return (await detectArchiveKind(path)) === 'zip'
-}
-
-export async function isArchiveFile(path: string): Promise<boolean> {
-  return (await detectArchiveKind(path)) !== null
-}
-
 export function findZipArtifacts(imageNames: string[]): string[] {
   return imageNames.filter((n) => ARCHIVE_EXT.has(extname(n).toLowerCase()))
 }

@@ -1,6 +1,5 @@
 import type { GalleryParseResult, ParseContext, SourceAdapter } from '../types'
 import type { ResourceManifest } from '../../resources/types'
-import { listManifestItems } from '../../resources/types'
 import { discoverTelegramMany } from './merge'
 import type { MediaHandle } from './discover'
 import { matchTelegramUrl, isPrivateTelegramMessageUrl } from './urls'
@@ -8,7 +7,7 @@ import { telegramService } from '../../telegram/client'
 
 export type { DiscoverTelegramResult, MediaHandle } from './discover'
 
-export async function discoverTelegramWithClient(
+async function discoverTelegramWithClient(
   url: string,
   apiId: number,
   apiHash: string,
@@ -60,21 +59,4 @@ export const telegramAdapter: SourceAdapter = {
   async parseGallery(): Promise<GalleryParseResult> {
     throw new Error('Telegram 需要先解析并勾选资源后再下载')
   },
-}
-
-export function manifestToParseResult(manifest: ResourceManifest): GalleryParseResult {
-  const items = listManifestItems(manifest)
-  return {
-    source: manifest.source,
-    galleryId: manifest.galleryId,
-    title: manifest.title,
-    sourceUrl: manifest.sourceUrl,
-    author: manifest.author ?? '',
-    tags: [],
-    pageCount: 1,
-    coverUrl: null,
-    images: items
-      .filter((i) => i.downloadUrl)
-      .map((i, idx) => ({ index: idx + 1, url: i.downloadUrl! })),
-  }
 }

@@ -3,6 +3,7 @@ import ContextMenu from '../components/ContextMenu'
 import ExtractZipModal from '../components/ExtractZipModal'
 import GalleryLightbox from '../components/GalleryLightbox'
 import { useToast } from '../lib/toast'
+import { useConfirm } from '../lib/confirm'
 import { api, type GalleryMetadata, type LibraryIndexEntry } from '../lib/api'
 
 interface Props {
@@ -84,6 +85,7 @@ function readDensity(): ThumbDensity {
 
 export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.Element {
   const toast = useToast()
+  const confirm = useConfirm()
   const [meta, setMeta] = useState<GalleryMetadata | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [selectMode, setSelectMode] = useState(false)
@@ -143,7 +145,13 @@ export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.El
 
   async function deletePaths(paths: string[]): Promise<void> {
     if (paths.length === 0) return
-    if (!window.confirm(`删除选中的 ${paths.length} 项？`)) return
+    const ok = await confirm({
+      title: '删除图片',
+      message: `删除选中的 ${paths.length} 项？`,
+      confirmLabel: '删除',
+      danger: true,
+    })
+    if (!ok) return
     const next = await api.deleteImages(entry.source, entry.galleryId, paths)
     setMeta(next)
     setSelected(new Set())

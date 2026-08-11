@@ -111,24 +111,6 @@ export function applyLibraryFilters(
   return list
 }
 
-export function aggregateTagStats(entries: FilterableEntry[]): TagStat[] {
-  const map = new Map<string, { tag: string; count: number }>()
-  for (const e of entries) {
-    for (const raw of e.tags) {
-      const tag = raw.trim()
-      if (!tag) continue
-      const key = tag.toLowerCase()
-      const cur = map.get(key)
-      if (cur) cur.count += 1
-      else map.set(key, { tag, count: 1 })
-    }
-  }
-  return [...map.values()].sort((a, b) => {
-    if (b.count !== a.count) return b.count - a.count
-    return a.tag.localeCompare(b.tag)
-  })
-}
-
 export function aggregateAuthorStats(entries: FilterableEntry[]): AuthorStat[] {
   const map = new Map<string, { author: string; count: number }>()
   for (const e of entries) {

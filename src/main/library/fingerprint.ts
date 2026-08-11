@@ -21,21 +21,3 @@ export async function fingerprintFile(filePath: string): Promise<string | null> 
     return null
   }
 }
-
-/** Group entries that share the same fingerprint (size ≥ 2). */
-export function groupDuplicatesByFingerprint<T extends { contentFingerprint?: string | null }>(
-  items: T[],
-): Array<{ fingerprint: string; items: T[] }> {
-  const map = new Map<string, T[]>()
-  for (const item of items) {
-    const fp = item.contentFingerprint?.trim()
-    if (!fp) continue
-    const list = map.get(fp)
-    if (list) list.push(item)
-    else map.set(fp, [item])
-  }
-  return [...map.entries()]
-    .filter(([, group]) => group.length >= 2)
-    .map(([fingerprint, group]) => ({ fingerprint, items: group }))
-    .sort((a, b) => b.items.length - a.items.length)
-}

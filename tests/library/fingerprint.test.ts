@@ -2,12 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  fingerprintFile,
-  groupDuplicatesByFingerprint,
-  hashFileSha1,
-} from '@main/library/fingerprint'
-import { normalizeHistory, pushBrowse, pushSearch } from '@main/library/history'
+import { fingerprintFile, hashFileSha1 } from '@main/library/fingerprint'
+import { normalizeHistory, pushBrowse } from '@main/library/history'
 
 describe('fingerprint', () => {
   const dirs: string[] = []
@@ -26,17 +22,6 @@ describe('fingerprint', () => {
     expect(await hashFileSha1(a)).toBe(await hashFileSha1(b))
     expect(await fingerprintFile(a)).toHaveLength(40)
   })
-
-  it('groups duplicates by fingerprint', () => {
-    const groups = groupDuplicatesByFingerprint([
-      { id: '1', contentFingerprint: 'aaa' },
-      { id: '2', contentFingerprint: 'aaa' },
-      { id: '3', contentFingerprint: 'bbb' },
-      { id: '4', contentFingerprint: null },
-    ])
-    expect(groups).toHaveLength(1)
-    expect(groups[0]?.items.map((x) => x.id)).toEqual(['1', '2'])
-  })
 })
 
 describe('history helpers', () => {
@@ -47,13 +32,5 @@ describe('history helpers', () => {
     s = pushBrowse(s, { source: 'x', galleryId: '1', title: 'A2', at: '2026-01-03T00:00:00.000Z' })
     expect(s.browsed[0]?.galleryId).toBe('1')
     expect(s.browsed).toHaveLength(2)
-  })
-
-  it('pushSearch dedupes', () => {
-    let s = normalizeHistory({})
-    s = pushSearch(s, 'foo')
-    s = pushSearch(s, 'bar')
-    s = pushSearch(s, 'foo')
-    expect(s.searches).toEqual(['foo', 'bar'])
   })
 })

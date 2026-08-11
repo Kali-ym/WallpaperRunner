@@ -6,7 +6,7 @@ import { join } from 'node:path'
 const STARTUP_VBS = 'GalleryWeMediaServer.vbs'
 const STARTUP_CMD_LEGACY = 'GalleryWeMediaServer.cmd'
 
-export function windowsStartupDir(): string {
+function windowsStartupDir(): string {
   return join(
     process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'),
     'Microsoft',
@@ -17,7 +17,7 @@ export function windowsStartupDir(): string {
   )
 }
 
-export function startupShortcutPath(): string {
+function startupShortcutPath(): string {
   return join(windowsStartupDir(), STARTUP_VBS)
 }
 

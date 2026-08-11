@@ -3,7 +3,7 @@ import { matchTelegraphUrl } from '../adapters/telegraph/urls'
 import { extractXchinaId } from '../adapters/xchina/urls'
 import type { DownloadSource } from './types'
 
-export function matchSourceUrl(source: DownloadSource, url: string): boolean {
+function matchSourceUrl(source: DownloadSource, url: string): boolean {
   const trimmed = url.trim()
   if (!trimmed) return false
   switch (source) {

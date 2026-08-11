@@ -6,7 +6,7 @@ import { clearAdapters, registerAdapter, resolveAdapter } from '@main/adapters/r
 import { xchinaAdapter } from '@main/adapters/xchina/adapter'
 
 const fix = (name: string): string =>
-  readFileSync(path.join(__dirname, '../../fixtures/xchina', name), 'utf8')
+  readFileSync(path.join(__dirname, '../fixtures/xchina', name), 'utf8')
 
 const fake: SourceAdapter = {
   id: 'fake',

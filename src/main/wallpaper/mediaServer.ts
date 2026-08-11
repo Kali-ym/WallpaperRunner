@@ -37,15 +37,7 @@ function send(res: http.ServerResponse, code: number, body: string | Buffer, typ
   res.end(body)
 }
 
-export function isMediaServerRunning(): boolean {
-  return server !== null
-}
-
-export function getMediaServerInfo(): MediaServerOptions | null {
-  return current
-}
-
-export async function stopWallpaperMediaServer(): Promise<void> {
+async function stopWallpaperMediaServer(): Promise<void> {
   const s = server
   server = null
   current = null

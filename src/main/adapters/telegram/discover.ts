@@ -9,8 +9,7 @@ import type {
   TelegraphResourceGroup,
 } from '../../resources/types'
 import type { MediaHandle } from '../../resources/handles'
-import { discoverTelegraph } from '../telegraph/adapter'
-import { discoverTelegraphViaTelegram } from '../telegraph/telegramCache'
+import { discoverTelegraphBestEffort } from '../telegraph/discover'
 import { extractTelegraphUrlsFromText } from '../telegraph/urls'
 import { normalizeTelegramMessageUrl, parseTelegramMessageUrl } from './urls'
 
@@ -322,35 +321,8 @@ export async function discoverTelegramMessage(
       seenTgph.add(tgUrl)
       if (signal?.aborted) throw new Error('已取消')
       try {
-        const cached = await discoverTelegraphViaTelegram(client, tgUrl)
-        if (cached && cached.manifest.groups.telegraph[0]?.items.length) {
-          const items = cached.manifest.groups.telegraph.flatMap((g) =>
-            g.items.map((item, i) => {
-              const id = `tg:telegraph:${cached.manifest.galleryId}:${i}:${entry.origin}`
-              const next: ResourceItem = {
-                ...item,
-                id,
-                origin: 'telegraph',
-                label: item.label.startsWith('Telegraph')
-                  ? item.label
-                  : `Telegraph · ${item.label}`,
-              }
-              const h = cached.handles.get(item.id)
-              if (h) handles.set(id, h)
-              return next
-            }),
-          )
-          telegraphGroups.push({
-            url: tgUrl,
-            title: cached.manifest.title,
-            fromOrigin: entry.origin,
-            fromCommentId: entry.commentId,
-            items,
-          })
-          continue
-        }
-
-        const sub = await discoverTelegraph(tgUrl, { fetchText, signal })
+        const discovered = await discoverTelegraphBestEffort(tgUrl, { fetchText, signal }, client)
+        const sub = discovered.manifest
         const items = sub.groups.telegraph.flatMap((g) =>
           g.items.map((item, i) => {
             const id = `tg:telegraph:${sub.galleryId}:${i}:${entry.origin}`
@@ -358,14 +330,14 @@ export async function discoverTelegramMessage(
               ...item,
               id,
               origin: 'telegraph',
-              label: `Telegraph · ${item.label.replace(/^Telegraph · /, '')}`,
+              label: item.label.startsWith('Telegraph') ? item.label : `Telegraph · ${item.label}`,
             }
-            if (item.downloadUrl) {
-              handles.set(id, { kind: 'http', url: item.downloadUrl })
-            }
+            const h = discovered.handles.get(item.id)
+            if (h) handles.set(id, h)
             return next
           }),
         )
+        if (items.length === 0) continue
         telegraphGroups.push({
           url: tgUrl,
           title: sub.title,

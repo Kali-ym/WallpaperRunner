@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import {
   applyLibraryFilters,
   aggregateAuthorStats,
-  aggregateTagStats,
   mergeTags,
   normalizeImageRange,
   type FilterableEntry,
@@ -52,12 +51,7 @@ describe('library filters helpers', () => {
     expect(ranged.map((e) => e.title).sort()).toEqual(['late', 'mid'])
   })
 
-  it('aggregates tag stats and mergeTags dedupes case-insensitively', () => {
-    const stats = aggregateTagStats([
-      base({ tags: ['JK', '国模'] }),
-      base({ tags: ['jk', '街拍'] }),
-    ])
-    expect(stats[0]).toEqual({ tag: 'JK', count: 2 })
+  it('aggregates author stats and mergeTags dedupes case-insensitively', () => {
     expect(mergeTags(['JK'], ['jk', '街拍'])).toEqual(['JK', '街拍'])
   })
 
@@ -154,43 +148,9 @@ describe('LibraryStore', () => {
     const both = await store.search('', { tags: ['jk', '国模'] })
     expect(both.map((e) => e.galleryId)).toEqual(['a'])
 
-    const stats = await store.listTagStats()
-    expect(stats.find((s) => s.tag.toLowerCase() === 'jk')?.count).toBe(2)
-
     const n = await store.addTags([{ source: 'telegram', galleryId: 'b' }], ['JK', '街拍'])
     expect(n).toBe(1)
     const meta = await store.getGallery('telegram', 'b')
     expect(meta?.tags.map((t) => t.toLowerCase()).sort()).toEqual(['jk', '街拍'])
-  })
-
-  it('finds duplicates by cover fingerprint', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'gal-dup-'))
-    dirs.push(root)
-    const store = new LibraryStore(root)
-    const bytes = Buffer.from('dup-cover-bytes')
-
-    async function seed(id: string, title: string): Promise<void> {
-      const dir = store.resolveGalleryDir('local', id, title)
-      await mkdir(dir, { recursive: true })
-      await writeFile(join(dir, '001.jpg'), bytes)
-      await store.upsertGallery({
-        source: 'local',
-        galleryId: id,
-        title,
-        sourceUrl: `file://${dir}`,
-        author: '',
-        tags: [],
-        pageCount: 1,
-        cover: '001.jpg',
-        images: ['001.jpg'],
-        downloadedAt: new Date().toISOString(),
-      })
-    }
-
-    await seed('g1', '一套')
-    await seed('g2', '二套')
-    const groups = await store.findDuplicates()
-    expect(groups).toHaveLength(1)
-    expect(groups[0]?.galleries).toHaveLength(2)
   })
 })

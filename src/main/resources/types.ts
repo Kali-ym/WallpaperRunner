@@ -70,10 +70,3 @@ export function listManifestItems(manifest: ResourceManifest): ResourceItem[] {
   for (const t of manifest.groups.telegraph) items.push(...t.items)
   return items
 }
-
-export function defaultSelectedIds(manifest: ResourceManifest): string[] {
-  if (manifest.source === 'telegraph') {
-    return listManifestItems(manifest).map((i) => i.id)
-  }
-  return manifest.groups.post.map((i) => i.id)
-}

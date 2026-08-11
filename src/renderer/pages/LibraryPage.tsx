@@ -19,6 +19,7 @@ import BatchTagModal from '../components/BatchTagModal'
 import PlaylistManageModal from '../components/PlaylistManageModal'
 import type { BrowseSelection } from '../components/CollectionRail'
 import { useToast } from '../lib/toast'
+import { useConfirm } from '../lib/confirm'
 import { buildAuthorCoverMap, defaultAuthorCoverEntry } from '../lib/authorCover'
 import {
   api,
@@ -152,6 +153,7 @@ export default function LibraryPage({
   hideSearch,
 }: Props): JSX.Element {
   const toast = useToast()
+  const confirm = useConfirm()
   const [queryLocal, setQueryLocal] = useState('')
   const query = queryProp ?? queryLocal
   const setQuery = onQueryChange ?? setQueryLocal
@@ -374,7 +376,13 @@ export default function LibraryPage({
 
   async function batchDelete(): Promise<void> {
     if (selectedRefs.length === 0) return
-    if (!window.confirm(`确定删除选中的 ${selectedRefs.length} 部套图？此操作不可恢复。`)) return
+    const ok = await confirm({
+      title: '删除套图',
+      message: `确定删除选中的 ${selectedRefs.length} 部套图？此操作不可恢复。`,
+      confirmLabel: '删除',
+      danger: true,
+    })
+    if (!ok) return
     await api.deleteGalleries(selectedRefs)
     setSelected(new Set())
     reload()
@@ -444,7 +452,13 @@ export default function LibraryPage({
 
   async function deleteCurrentPlaylist(): Promise<void> {
     if (browseSelection.kind !== 'playlist') return
-    if (!window.confirm(`确定删除播放列表「${browseSelection.name}」？`)) return
+    const ok = await confirm({
+      title: '删除播放列表',
+      message: `确定删除播放列表「${browseSelection.name}」？`,
+      confirmLabel: '删除',
+      danger: true,
+    })
+    if (!ok) return
     await api.deletePlaylist(browseSelection.id)
     onBrowseSelectionChange?.({ kind: 'all' })
     toast.success('已删除播放列表')
@@ -607,7 +621,13 @@ export default function LibraryPage({
     if (id === 'favorite') patchFavorite(entry, !entry.favorite)
     if (id === 'folder') await api.openGalleryFolder(entry.source, entry.galleryId)
     if (id === 'delete') {
-      if (!window.confirm(`确定删除「${entry.displayTitle || entry.title}」？`)) return
+      const ok = await confirm({
+        title: '删除套图',
+        message: `确定删除「${entry.displayTitle || entry.title}」？`,
+        confirmLabel: '删除',
+        danger: true,
+      })
+      if (!ok) return
       await api.deleteGallery(entry.source, entry.galleryId)
       reload()
       toast.success('已删除')

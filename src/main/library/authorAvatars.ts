@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile, unlink, access, rename } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { nativeImage } from 'electron'
-import type { LibraryIndexEntry, LibraryStore } from './store'
+import type { LibraryStore } from './store'
 
 const AVATAR_DIR = '.author-avatars'
 const INDEX_FILE = 'author-avatars.json'
 const AVATAR_SIZE = 256
 
-export type AuthorAvatarCrop = {
+type AuthorAvatarCrop = {
   x: number
   y: number
   width: number
@@ -283,34 +283,4 @@ async function cropAndSaveAvatar(
   })
   await mkdir(dirname(outPath), { recursive: true })
   await writeFile(outPath, resized.toJPEG(88))
-}
-
-/** First gallery cover for an author (by download time). */
-export function defaultAuthorCoverEntry(
-  lib: LibraryIndexEntry[],
-  author: string,
-): LibraryIndexEntry | undefined {
-  const needle = author.trim().toLowerCase()
-  if (!needle) return undefined
-  const entries = lib
-    .filter((e) => e.author?.trim().toLowerCase() === needle && e.cover)
-    .sort((a, b) => a.downloadedAt.localeCompare(b.downloadedAt))
-  return entries[0]
-}
-
-export function buildAuthorCoverMap(lib: LibraryIndexEntry[]): Map<string, LibraryIndexEntry> {
-  const buckets = new Map<string, LibraryIndexEntry[]>()
-  for (const e of lib) {
-    const author = e.author?.trim()
-    if (!author || !e.cover) continue
-    const list = buckets.get(author) ?? []
-    list.push(e)
-    buckets.set(author, list)
-  }
-  const map = new Map<string, LibraryIndexEntry>()
-  for (const [author, entries] of buckets) {
-    const sorted = [...entries].sort((a, b) => a.downloadedAt.localeCompare(b.downloadedAt))
-    map.set(author, sorted[0]!)
-  }
-  return map
 }

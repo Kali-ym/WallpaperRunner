@@ -48,13 +48,6 @@ export function pushBrowse(state: HistoryState, ref: Omit<HistoryBrowseRef, 'at'
   return { ...state, browsed }
 }
 
-export function pushSearch(state: HistoryState, query: string): HistoryState {
-  const q = query.trim()
-  if (!q) return state
-  const searches = [q, ...state.searches.filter((s) => s !== q)].slice(0, MAX_SEARCHES)
-  return { ...state, searches }
-}
-
 export class HistoryStore {
   private cache: HistoryState | null = null
 
@@ -78,17 +71,8 @@ export class HistoryStore {
     return state
   }
 
-  async get(): Promise<HistoryState> {
-    return this.load()
-  }
-
   async recordBrowse(ref: Omit<HistoryBrowseRef, 'at'> & { at?: string }): Promise<HistoryState> {
     const cur = await this.load()
     return this.save(pushBrowse(cur, ref))
-  }
-
-  async recordSearch(query: string): Promise<HistoryState> {
-    const cur = await this.load()
-    return this.save(pushSearch(cur, query))
   }
 }

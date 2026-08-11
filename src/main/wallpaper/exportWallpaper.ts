@@ -40,7 +40,7 @@ export interface SyncWallpaperResult {
 }
 
 export const DEFAULT_MEDIA_PORT = 17989
-export const WALLPAPER_PROJECT_TITLE = 'Gallery Library Slideshow'
+const WALLPAPER_PROJECT_TITLE = 'Gallery Library Slideshow'
 
 const MIRROR_FILES = [
   'main.js',
@@ -137,7 +137,7 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 /** Candidate Wallpaper Engine myprojects roots on this machine. */
-export function wallpaperEngineMyprojectsRoots(): string[] {
+function wallpaperEngineMyprojectsRoots(): string[] {
   const roots = new Set<string>()
   const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
   const pf = process.env.ProgramFiles || 'C:\\Program Files'
@@ -158,7 +158,7 @@ export function wallpaperEngineMyprojectsRoots(): string[] {
  * Find WE-imported project folders for this wallpaper (title match).
  * Import copies files into myprojects — syncing only Documents/ would leave WE on stale main.js.
  */
-export async function findImportedGalleryWallpaperDirs(
+async function findImportedGalleryWallpaperDirs(
   excludeDir?: string,
 ): Promise<string[]> {
   const exclude = excludeDir ? resolve(excludeDir) : ''

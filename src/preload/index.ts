@@ -7,7 +7,7 @@ import type { QueueTask } from '../main/queue/types'
 import type { ResourceManifest } from '../main/resources/types'
 import type { TelegramAuthStatus } from '../main/telegram/client'
 
-export type GalleryRef = { source: string; galleryId: string }
+type GalleryRef = { source: string; galleryId: string }
 export type AuthorAvatarRecord = {
   author: string
   fileName: string
@@ -36,9 +36,8 @@ const api = {
     ipcRenderer.invoke('settings:pickDownloadRoot'),
   listLibrary: (
     query?: string,
-    filters?: LibraryFilters | boolean,
+    filters?: LibraryFilters,
   ): Promise<LibraryIndexEntry[]> => ipcRenderer.invoke('library:list', query, filters),
-  tagStats: (): Promise<TagStat[]> => ipcRenderer.invoke('library:tagStats'),
   authorStats: (): Promise<AuthorStat[]> => ipcRenderer.invoke('library:authorStats'),
   getAuthorAvatar: (author: string): Promise<AuthorAvatarRecord | null> =>
     ipcRenderer.invoke('library:getAuthorAvatar', author),
@@ -109,23 +108,6 @@ const api = {
     ipcRenderer.invoke('library:deleteImages', source, id, paths),
   setCover: (source: string, id: string, relativePath: string): Promise<GalleryMetadata> =>
     ipcRenderer.invoke('library:setCover', source, id, relativePath),
-  redownloadGallery: (sourceUrl: string): Promise<QueueTask[]> =>
-    ipcRenderer.invoke('library:redownload', sourceUrl),
-  findDuplicates: (): Promise<
-    Array<{ fingerprint: string; galleries: LibraryIndexEntry[] }>
-  > => ipcRenderer.invoke('library:findDuplicates'),
-  scanFingerprints: (): Promise<number> => ipcRenderer.invoke('library:scanFingerprints'),
-  getHistory: (): Promise<{
-    browsed: Array<{
-      source: string
-      galleryId: string
-      title?: string
-      dirName?: string
-      cover?: string | null
-      at: string
-    }>
-    searches: string[]
-  }> => ipcRenderer.invoke('history:get'),
   recordBrowse: (ref: {
     source: string
     galleryId: string
@@ -133,8 +115,6 @@ const api = {
     dirName?: string
     cover?: string | null
   }): Promise<unknown> => ipcRenderer.invoke('history:recordBrowse', ref),
-  recordSearch: (query: string): Promise<unknown> =>
-    ipcRenderer.invoke('history:recordSearch', query),
   importLocalFolders: (
     paths: string[],
   ): Promise<{
@@ -178,11 +158,6 @@ const api = {
     ipcRenderer.invoke('queue:retryTask', taskId),
   retryAllFailed: (): Promise<number> => ipcRenderer.invoke('queue:retryAllFailed'),
   listTasks: (): Promise<QueueTask[]> => ipcRenderer.invoke('queue:list'),
-  classifyUrls: (
-    urls: string[],
-  ): Promise<
-    { url: string; source: string | null; needsSelection: boolean; supported: boolean }[]
-  > => ipcRenderer.invoke('resources:classify', urls),
   discoverResources: (source: DownloadSource, urls: string[]): Promise<ResourceManifest> =>
     ipcRenderer.invoke('resources:discover', source, urls),
   telegramStatus: (): Promise<TelegramAuthStatus> => ipcRenderer.invoke('telegram:status'),

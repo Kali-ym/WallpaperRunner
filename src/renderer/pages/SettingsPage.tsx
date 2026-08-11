@@ -89,7 +89,7 @@ export default function SettingsPage(): JSX.Element {
                       <div>
                         <div className="s-title">下载根目录</div>
                       </div>
-                      <div className="path-row" style={{ justifySelf: 'stretch', width: '100%', maxWidth: 'none' }}>
+                      <div className="path-row">
                         <input className="text-input" type="text" readOnly value={settings.downloadRoot} />
                         <button
                           type="button"
@@ -433,7 +433,7 @@ export default function SettingsPage(): JSX.Element {
                       <div>
                         <div className="s-title">WE 工程目录</div>
                       </div>
-                      <div className="path-row" style={{ justifySelf: 'stretch', width: '100%', maxWidth: 'none' }}>
+                      <div className="path-row">
                         <input className="text-input" type="text" readOnly value={settings.wallpaperEngineDir} />
                         <button
                           type="button"

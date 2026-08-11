@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX, type WheelEvent } 
 import Cropper, { type Area } from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { api, type AuthorAvatarRecord, type AuthorImageSource } from '../lib/api'
+import { useConfirm } from '../lib/confirm'
 
 type Props = {
   author: string
@@ -61,6 +62,7 @@ export default function AuthorAvatarModal({
   onClose,
   onSaved,
 }: Props): JSX.Element {
+  const confirm = useConfirm()
   const [sources, setSources] = useState<AuthorImageSource[]>([])
   const [loadingSources, setLoadingSources] = useState(true)
   const [pick, setPick] = useState<PickTarget | null>(null)
@@ -197,7 +199,12 @@ export default function AuthorAvatarModal({
   }
 
   async function resetDefault(): Promise<void> {
-    if (!window.confirm('恢复为默认头像（第一部套图封面）？')) return
+    const ok = await confirm({
+      title: '恢复默认头像',
+      message: '恢复为默认头像（第一部套图封面）？',
+      confirmLabel: '恢复',
+    })
+    if (!ok) return
     setBusy(true)
     setError('')
     try {

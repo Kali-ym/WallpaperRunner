@@ -1,12 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell } from 'electron'
 import { resolve, sep, extname, join } from 'node:path'
 import { mkdir, readFile } from 'node:fs/promises'
-import { getAdapterById, registerAdapter, resolveAdapter } from './adapters/registry'
+import { getAdapterById, registerAdapter } from './adapters/registry'
 import { isDownloadSource, type DownloadSource } from './sources/types'
 import { assertUrlsForSource } from './sources/validate'
 import { xchinaAdapter } from './adapters/xchina/adapter'
 import { telegramAdapter, discoverTelegramUrlsWithClient } from './adapters/telegram/adapter'
-import { telegraphAdapter, discoverTelegraph } from './adapters/telegraph/adapter'
+import { telegraphAdapter } from './adapters/telegraph/adapter'
+import { discoverTelegraphBestEffort } from './adapters/telegraph/discover'
 import {
   extractZipToGallery,
   zipGalleryIdFromPath,
@@ -17,7 +18,7 @@ import { putResourceManifest } from './resources/session'
 import type { ResourceManifest } from './resources/types'
 import { resolveThumb } from './library/thumbnails'
 
-export type AskExtractPayload = {
+type AskExtractPayload = {
   taskId: string
   source: string
   galleryId: string
@@ -326,14 +327,10 @@ export function registerIpc(): void {
 
   ipcMain.handle(
     'library:list',
-    async (_e, query?: string, filters?: import('./library/filters').LibraryFilters | boolean) => {
-      const f =
-        typeof filters === 'boolean' ? { favoriteOnly: filters } : (filters ?? {})
-      return store.search(query ?? '', f)
+    async (_e, query?: string, filters?: import('./library/filters').LibraryFilters) => {
+      return store.search(query ?? '', filters ?? {})
     },
   )
-
-  ipcMain.handle('library:tagStats', async () => store.listTagStats())
 
   ipcMain.handle('library:authorStats', async () => store.listAuthorStats())
 
@@ -524,18 +521,6 @@ export function registerIpc(): void {
     },
   )
 
-  ipcMain.handle('library:redownload', async (_e, sourceUrl: string) => {
-    const tasks = queue.enqueue([sourceUrl], { overwrite: true })
-    broadcastTasks()
-    return tasks
-  })
-
-  ipcMain.handle('library:findDuplicates', async () => store.findDuplicates())
-
-  ipcMain.handle('library:scanFingerprints', async () => store.scanFingerprints())
-
-  ipcMain.handle('history:get', async () => historyStore.get())
-
   ipcMain.handle(
     'history:recordBrowse',
     async (
@@ -548,10 +533,6 @@ export function registerIpc(): void {
         cover?: string | null
       },
     ) => historyStore.recordBrowse(ref),
-  )
-
-  ipcMain.handle('history:recordSearch', async (_e, query: string) =>
-    historyStore.recordSearch(String(query ?? '')),
   )
 
   ipcMain.handle('library:importLocalFolders', async (_e, paths: string[]) => {
@@ -673,18 +654,6 @@ export function registerIpc(): void {
 
   ipcMain.handle('queue:list', async () => queue.listTasks())
 
-  ipcMain.handle('resources:classify', async (_e, urls: string[]) => {
-    return urls.map((url) => {
-      const adapter = resolveAdapter(url.trim())
-      return {
-        url: url.trim(),
-        source: adapter?.id ?? null,
-        needsSelection: Boolean(adapter?.needsSelection?.(url.trim())),
-        supported: Boolean(adapter),
-      }
-    })
-  })
-
   ipcMain.handle('resources:discover', async (_e, source: DownloadSource, urls: string[]) => {
     if (!isDownloadSource(source)) throw new Error('未知下载来源')
     const cleaned = assertUrlsForSource(source, urls)
@@ -707,36 +676,21 @@ export function registerIpc(): void {
     } else if (source === 'telegraph') {
       if (cleaned.length !== 1) throw new Error('该来源每次请只解析一条链接')
       const trimmed = cleaned[0]
+      let client: Awaited<ReturnType<typeof telegramService.getClient>> | null = null
       const creds = telegramCredentials()
-      if (!creds) {
-        throw new Error(
-          'Telegraph 外链图床常失效，请先在设置中登录 Telegram，以便从 Telegram 缓存拉取图片',
-        )
-      }
-      await telegramService.connect(creds.apiId, creds.apiHash)
-      if (telegramService.getStatus().state !== 'authorized') {
-        throw new Error('请先在设置中登录 Telegram，再解析 Telegraph（走 Telegram 缓存下载）')
-      }
-      const client = await telegramService.getClient(creds.apiId, creds.apiHash)
-      const { discoverTelegraphViaTelegram } = await import('./adapters/telegraph/telegramCache')
-      const cached = await discoverTelegraphViaTelegram(client, trimmed)
-      if (!cached || !cached.manifest.groups.telegraph[0]?.items.length) {
-        console.warn('[telegraph] no telegram cache, falling back to HTTP scrape')
-        manifest = await discoverTelegraph(trimmed, { fetchText })
-        for (const g of manifest.groups.telegraph) {
-          for (const item of g.items) {
-            if (item.downloadUrl) {
-              handles.set(item.id, { kind: 'http', url: item.downloadUrl })
-            }
+      if (creds) {
+        try {
+          await telegramService.connect(creds.apiId, creds.apiHash)
+          if (telegramService.getStatus().state === 'authorized') {
+            client = await telegramService.getClient(creds.apiId, creds.apiHash)
           }
+        } catch {
+          /* fall back to HTTP scrape */
         }
-      } else {
-        console.info(
-          `[telegraph] using Telegram cache: ${cached.manifest.groups.telegraph[0].items.length} items`,
-        )
-        manifest = cached.manifest
-        handles = cached.handles
       }
+      const result = await discoverTelegraphBestEffort(trimmed, { fetchText }, client)
+      manifest = result.manifest
+      handles = result.handles
     } else {
       if (cleaned.length !== 1) throw new Error('该来源每次请只解析一条链接')
       manifest = await adapter.discover(cleaned[0], { fetchText })
