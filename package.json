@@ -1,7 +1,7 @@
 {
-  "name": "gallery-downloader-viewer",
+  "name": "wallpaperrunner",
   "version": "1.0.0",
-  "description": "WallpaperRunner — gallery downloader, local library, Wallpaper Engine loop",
+  "description": "WallpaperRunner — 壁纸下载、本地图库与 Wallpaper Engine 轮播",
   "main": "./out/main/index.js",
   "author": "WallpaperRunner",
   "license": "MIT",
@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --win nsis"
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:win": "npm run build && electron-builder --win nsis --config.electronDist=node_modules/electron/dist"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",
@@ -50,6 +51,7 @@
   "build": {
     "appId": "com.wallpaperrunner.app",
     "productName": "WallpaperRunner",
+    "copyright": "Copyright © 2026 WallpaperRunner",
     "npmRebuild": false,
     "directories": {
       "output": "release",
@@ -60,6 +62,7 @@
       "package.json"
     ],
     "asar": true,
+    "electronDist": "node_modules/electron/dist",
     "extraResources": [
       {
         "from": "build/icon.png",
@@ -68,7 +71,7 @@
     ],
     "win": {
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false,
+      "signExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -84,7 +87,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "WallpaperRunner"
+      "shortcutName": "WallpaperRunner",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "mac": {
       "target": [
