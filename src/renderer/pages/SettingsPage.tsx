@@ -106,7 +106,28 @@ export default function SettingsPage(): JSX.Element {
                     </div>
                     <div className="pref-row">
                       <div>
+                        <div className="s-title">下载任务并发</div>
+                        <div className="s-hint muted">同时下载几个套图链接</div>
+                      </div>
+                      <input
+                        className="text-input num-field"
+                        type="number"
+                        min={1}
+                        max={4}
+                        value={settings.taskConcurrency}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            taskConcurrency: Number(e.target.value) || 1,
+                          })
+                        }
+                        onBlur={() => void save({ taskConcurrency: settings.taskConcurrency })}
+                      />
+                    </div>
+                    <div className="pref-row">
+                      <div>
                         <div className="s-title">套内图片并发</div>
+                        <div className="s-hint muted">单个套图内同时下载几张图</div>
                       </div>
                       <input
                         className="text-input num-field"

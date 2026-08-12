@@ -154,6 +154,7 @@ function rebuildQueue(): void {
   queue = new DownloadQueue({
     store,
     imageConcurrency: settings.imageConcurrency,
+    taskConcurrency: settings.taskConcurrency,
     persistPath: join(app.getPath('userData'), 'queue.json'),
     getTelegramCredentials: telegramCredentials,
   })

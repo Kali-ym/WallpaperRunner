@@ -137,10 +137,14 @@ export async function downloadFile(
         baseHeaders.Range = `bytes=${offset}-`
       }
 
-      const res = await httpFetch(url, {
-        signal: opts?.signal,
-        headers: baseHeaders,
-      })
+      const res = await httpFetch(
+        url,
+        {
+          signal: opts?.signal,
+          headers: baseHeaders,
+        },
+        { disableCurl: true },
+      )
 
       if (res.status === 404) {
         throw new Error(`资源不存在 (HTTP 404)，图床可能已失效: ${url}`)

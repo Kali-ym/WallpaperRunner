@@ -99,8 +99,8 @@ export async function downloadGallery(
   }
 
   const total = result.images.length
-  let done = 0
-  let failed = 0
+  let doneCount = 0
+  let failedCount = 0
   const imageNames: (string | null)[] = new Array(total).fill(null)
   const errors: string[] = []
 
@@ -115,9 +115,9 @@ export async function downloadGallery(
     const name = `${baseName}${tentativeExt}`
     let lastByteMark = 0
     opts.onProgress?.({
-      done,
+      done: doneCount,
       total,
-      failed,
+      failed: failedCount,
       file: { id: fileId, name, status: 'downloading' },
     })
     try {
@@ -134,9 +134,9 @@ export async function downloadGallery(
           const delta = Math.max(0, received - lastByteMark)
           lastByteMark = received
           opts.onProgress?.({
-            done,
+            done: doneCount,
             total,
-            failed,
+            failed: failedCount,
             bytesDelta: delta,
             bytesReceived: received,
             bytesTotal: fileTotal ?? undefined,
@@ -164,13 +164,29 @@ export async function downloadGallery(
         await access(dest)
         finalName = name
       }
+      doneCount += 1
+      const rem = Math.max(0, downloaded.bytes - lastByteMark)
+      opts.onProgress?.({
+        done: doneCount,
+        total,
+        failed: failedCount,
+        bytesDelta: rem,
+        file: {
+          id: fileId,
+          name: finalName,
+          status: 'done',
+          bytesReceived: downloaded.bytes,
+          bytesTotal: downloaded.bytes,
+        },
+      })
       return { fileId, finalName, bytes: downloaded.bytes, lastByteMark }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      failedCount += 1
       opts.onProgress?.({
-        done,
+        done: doneCount,
         total,
-        failed,
+        failed: failedCount,
         file: { id: fileId, name, status: 'failed', error: msg },
       })
       throw err
@@ -179,45 +195,17 @@ export async function downloadGallery(
 
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i]
-    const fileId = `img_${i}`
     if (r.status === 'fulfilled') {
       imageNames[i] = r.value.finalName
-      done += 1
-      const rem = Math.max(0, r.value.bytes - r.value.lastByteMark)
-      opts.onProgress?.({
-        done,
-        total,
-        failed,
-        bytesDelta: rem,
-        file: {
-          id: fileId,
-          name: r.value.finalName,
-          status: 'done',
-          bytesReceived: r.value.bytes,
-          bytesTotal: r.value.bytes,
-        },
-      })
     } else {
-      failed += 1
       const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
       errors.push(`${String(i + 1).padStart(3, '0')}: ${msg}`)
-      opts.onProgress?.({
-        done,
-        total,
-        failed,
-        file: {
-          id: fileId,
-          name: `${String(i + 1).padStart(3, '0')}`,
-          status: 'failed',
-          error: msg,
-        },
-      })
     }
   }
 
   const saved = imageNames.filter((n): n is string => Boolean(n))
   if (saved.length === 0) {
-    throw new Error(`全部下载失败（${failed}/${total}）\n` + errors.slice(0, 5).join('\n'))
+    throw new Error(`全部下载失败（${failedCount}/${total}）\n` + errors.slice(0, 5).join('\n'))
   }
 
   const meta: GalleryMetadata = {
@@ -237,9 +225,9 @@ export async function downloadGallery(
 
   await store.upsertGallery(meta)
 
-  if (failed > 0) {
+  if (failedCount > 0) {
     const err = new Error(
-      `部分下载失败：成功 ${saved.length}/${total}，失败 ${failed}。可稍后「重新下载」补全。\n` +
+      `部分下载失败：成功 ${saved.length}/${total}，失败 ${failedCount}。可稍后「重新下载」补全。\n` +
         errors.slice(0, 8).join('\n'),
     )
     ;(err as Error & { partialMeta?: GalleryMetadata }).partialMeta = meta

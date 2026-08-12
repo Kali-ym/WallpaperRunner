@@ -9,6 +9,8 @@ export type ThemePreference = 'system' | 'light' | 'dark'
 export interface AppSettings {
   downloadRoot: string
   imageConcurrency: number
+  /** How many gallery download tasks may run in parallel. */
+  taskConcurrency: number
   /** HTTP(S) proxy, e.g. http://127.0.0.1:7890. Empty = direct. */
   proxyUrl: string
   /** Local Wallpaper Engine web wallpaper project directory */
@@ -37,6 +39,7 @@ function defaultSettings(): AppSettings {
   return {
     downloadRoot: join(homedir(), 'Pictures', 'gallery-library'),
     imageConcurrency: 2,
+    taskConcurrency: 2,
     // Clash / common local proxy default; user can clear in settings
     proxyUrl: envProxy || 'http://127.0.0.1:7890',
     wallpaperEngineDir: join(homedir(), 'Documents', 'gallery-we-wallpaper'),
@@ -67,6 +70,10 @@ export async function loadSettings(): Promise<AppSettings> {
         typeof parsed.imageConcurrency === 'number' && parsed.imageConcurrency > 0
           ? Math.floor(parsed.imageConcurrency)
           : defaults.imageConcurrency,
+      taskConcurrency:
+        typeof parsed.taskConcurrency === 'number' && parsed.taskConcurrency > 0
+          ? Math.floor(parsed.taskConcurrency)
+          : defaults.taskConcurrency,
       proxyUrl:
         typeof parsed.proxyUrl === 'string' ? parsed.proxyUrl.trim() : defaults.proxyUrl,
       wallpaperEngineDir:
@@ -108,6 +115,10 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
       typeof partial.imageConcurrency === 'number' && partial.imageConcurrency > 0
         ? Math.floor(partial.imageConcurrency)
         : current.imageConcurrency,
+    taskConcurrency:
+      typeof partial.taskConcurrency === 'number' && partial.taskConcurrency > 0
+        ? Math.floor(partial.taskConcurrency)
+        : current.taskConcurrency,
     proxyUrl:
       typeof partial.proxyUrl === 'string' ? partial.proxyUrl.trim() : current.proxyUrl,
     wallpaperEngineDir:

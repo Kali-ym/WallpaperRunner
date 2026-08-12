@@ -27,6 +27,8 @@ import type { QueueProgress, QueueTask, QueueTaskStatus } from './types'
 export interface DownloadQueueOptions {
   store: LibraryStore
   imageConcurrency: number
+  /** Max gallery tasks running at once (each still uses imageConcurrency internally). */
+  taskConcurrency?: number
   /** When set, debounce-write queue state here and restore on `restoreFromDisk`. */
   persistPath?: string
   fetchText?: (url: string) => Promise<string>
@@ -41,7 +43,7 @@ interface InternalTask extends QueueTask {
 
 export class DownloadQueue extends EventEmitter {
   private tasks: InternalTask[] = []
-  private running = false
+  private activeTasks = 0
   private paused = false
   private abortControllers = new Map<string, AbortController>()
   private persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -356,8 +358,10 @@ export class DownloadQueue extends EventEmitter {
     const agg = aggregateByteProgress(files)
     const received = Math.max(agg.received, rates.bytesDownloaded.n)
     const byteTotal = agg.total > 0 ? Math.max(agg.total, received) : 0
-    const percent =
+    const filePercent = computePercent(done, total)
+    const bytePercent =
       byteTotal > 0 ? Math.min(100, Math.round((received / byteTotal) * 100)) : 0
+    const percent = byteTotal > 0 ? bytePercent : filePercent
     const bytesPerSec = rates.byteRate.sample(received)
     const etaSec =
       byteTotal > 0 ? computeByteEtaSec(received, byteTotal, bytesPerSec) : null
@@ -378,22 +382,23 @@ export class DownloadQueue extends EventEmitter {
   }
 
   private async pump(): Promise<void> {
-    if (this.running) return
-    this.running = true
-    try {
-      while (true) {
-        if (this.paused) break
-        const next = this.tasks.find((t) => t.status === 'queued')
-        if (!next) break
-        await this.runTask(next)
-      }
-    } finally {
-      this.running = false
-      if (!this.paused && this.tasks.some((t) => t.status === 'queued')) {
-        void this.pump()
-      } else {
-        this.emit('idle')
-      }
+    if (this.paused) return
+    const limit = Math.min(Math.max(1, this.opts.taskConcurrency ?? 2), 4)
+    while (this.activeTasks < limit) {
+      const next = this.tasks.find((t) => t.status === 'queued')
+      if (!next) break
+      this.activeTasks += 1
+      void this.runTask(next).finally(() => {
+        this.activeTasks -= 1
+        if (!this.paused && this.tasks.some((t) => t.status === 'queued')) {
+          void this.pump()
+        } else if (this.activeTasks === 0) {
+          this.emit('idle')
+        }
+      })
+    }
+    if (this.activeTasks === 0 && !this.tasks.some((t) => t.status === 'queued')) {
+      this.emit('idle')
     }
   }
 
