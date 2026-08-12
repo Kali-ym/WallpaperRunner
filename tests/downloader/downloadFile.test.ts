@@ -35,6 +35,12 @@ describe('downloadFile helpers', () => {
     expect(extensionFromMagic(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]))).toBe('.zip')
   })
 
+  it('isHtmlOrBlockedPage detects Cloudflare challenge HTML', async () => {
+    const { isHtmlOrBlockedPage } = await import('@main/downloader/downloadFile')
+    const html = Buffer.from('<!DOCTYPE html><html><title>Just a moment...</title>')
+    expect(isHtmlOrBlockedPage(html)).toBe(true)
+  })
+
   it('writes bytes from fetch', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dl-'))
     dirs.push(root)
@@ -42,6 +48,7 @@ describe('downloadFile helpers', () => {
     const bytes = Buffer.alloc(2048, 1)
     bytes[0] = 0xff
     bytes[1] = 0xd8
+    bytes[2] = 0xff
 
     vi.mocked(httpFetch).mockResolvedValue({
       ok: true,
@@ -61,6 +68,9 @@ describe('downloadFile helpers', () => {
     dirs.push(root)
     const dest = join(root, 'pack.bin')
     const part1 = Buffer.alloc(1500, 2)
+    part1[0] = 0xff
+    part1[1] = 0xd8
+    part1[2] = 0xff
     const part2 = Buffer.alloc(1500, 3)
     const chunks = [part1, part2]
     let i = 0
@@ -102,6 +112,9 @@ describe('downloadFile helpers', () => {
     const dest = join(root, '001.jpg')
     const partPath = `${dest}.part`
     const existing = Buffer.alloc(1024, 9)
+    existing[0] = 0xff
+    existing[1] = 0xd8
+    existing[2] = 0xff
     await writeFile(partPath, existing)
 
     const rest = Buffer.alloc(1024, 8)

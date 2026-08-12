@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { access, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { finished } from 'node:stream/promises'
 import { httpFetch, getPreferCurl, curlDownloadToFile } from '../http/client'
@@ -23,6 +23,42 @@ function retryDelayMs(err: unknown, attempt: number): number {
   const rateLimited = /HTTP 429|HTTP 502|HTTP 503|HTTP 403/.test(msg)
   const base = rateLimited ? 2000 : 400
   return base * 2 ** attempt
+}
+
+/** Cloudflare / CDN block pages that return HTTP 200 with HTML bodies. */
+export function isHtmlOrBlockedPage(buf: Buffer): boolean {
+  if (buf.length < 12) return false
+  const start = buf.subarray(0, Math.min(buf.length, 512)).toString('utf8').toLowerCase()
+  if (start.startsWith('<!doctype') || start.startsWith('<html')) return true
+  if (start.includes('just a moment')) return true
+  if (start.includes('cloudflare')) return true
+  return false
+}
+
+export function validateImageBuffer(buf: Buffer, url?: string): void {
+  const suffix = url ? `: ${url}` : ''
+  if (buf.length < 1024) {
+    throw new Error(`Downloaded file too small (${buf.length} bytes)${suffix}`)
+  }
+  if (isHtmlOrBlockedPage(buf)) {
+    throw new Error(`Expected image but got HTML/block page${suffix}`)
+  }
+  if (!extensionFromMagic(buf.subarray(0, 16))) {
+    throw new Error(`Downloaded file is not a valid image${suffix}`)
+  }
+}
+
+async function finalizeDownload(
+  partPath: string,
+  destPath: string,
+  url: string,
+): Promise<{ bytes: number }> {
+  const body = await readFile(partPath)
+  validateImageBuffer(body, url)
+  await unlink(destPath).catch(() => undefined)
+  await rename(partPath, destPath)
+  await access(destPath)
+  return { bytes: body.length }
 }
 
 async function partialSize(partPath: string): Promise<number> {
@@ -148,17 +184,10 @@ async function downloadViaCurl(
   if (contentType && contentType.includes('text/html')) {
     throw new Error(`Expected image but got HTML from ${url}`)
   }
-  if (curlResult.bytes < 1024) {
-    await unlink(partPath).catch(() => undefined)
-    throw new Error(`Downloaded file too small (${curlResult.bytes} bytes): ${url}`)
-  }
-
-  await unlink(destPath).catch(() => undefined)
-  await rename(partPath, destPath)
-  await access(destPath)
+  const finalized = await finalizeDownload(partPath, destPath, url)
 
   return {
-    bytes: curlResult.bytes,
+    bytes: finalized.bytes,
     contentType,
   }
 }
@@ -265,17 +294,10 @@ export async function downloadFile(
         total,
       })
 
-      if (received < 1024) {
-        await unlink(partPath).catch(() => undefined)
-        throw new Error(`Downloaded file too small (${received} bytes): ${url}`)
-      }
-
-      await unlink(destPath).catch(() => undefined)
-      await rename(partPath, destPath)
-      await access(destPath)
+      const finalized = await finalizeDownload(partPath, destPath, url)
 
       return {
-        bytes: received,
+        bytes: finalized.bytes,
         contentType,
       }
     } catch (err) {

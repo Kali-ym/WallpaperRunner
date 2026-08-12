@@ -200,9 +200,13 @@ export async function downloadGallery(
       },
     })
 
-    const { readFile, rename, access } = await import('node:fs/promises')
+    const { readFile, rename, access, unlink } = await import('node:fs/promises')
     const head = await readFile(dest)
     const magicExt = extensionFromMagic(head)
+    if (!magicExt) {
+      await unlink(dest).catch(() => undefined)
+      throw new Error(`Downloaded file is not a valid image: ${img.url}`)
+    }
     const typeExt = extensionFromUrlOrType(img.url, downloaded.contentType)
     const finalExt = magicExt ?? typeExt
     let finalName = `${baseName}${finalExt}`
