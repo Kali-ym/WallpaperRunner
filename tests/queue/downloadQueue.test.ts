@@ -7,6 +7,8 @@ vi.mock('@main/http/client', () => ({
   httpFetch: vi.fn(),
   setHttpProxy: vi.fn(),
   getHttpProxy: vi.fn(() => null),
+  getPreferCurl: vi.fn(() => false),
+  curlDownloadToFile: vi.fn(),
 }))
 
 import { httpFetch } from '@main/http/client'
@@ -212,5 +214,71 @@ describe('DownloadQueue', () => {
     expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('cancelled')
     queue.retryTask(a!.id)
     expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('queued')
+  })
+
+  it('batch pause/resume, remove terminal tasks, and clear groups', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'q-batch-'))
+    dirs.push(root)
+    const store = new LibraryStore(root)
+    const queue = new DownloadQueue({ store, imageConcurrency: 1 })
+    queue.pause()
+
+    const now = new Date().toISOString()
+    queue.enqueue(['https://run.example/1', 'https://run.example/2'])
+    const tasks = queue.listTasks()
+    queue.pauseTask(tasks[0]!.id)
+
+    expect(queue.pauseAllActive()).toBe(1)
+    expect(queue.listTasks().every((t) => t.status === 'paused')).toBe(true)
+    expect(queue.resumeAllPaused()).toBe(2)
+    expect(queue.listTasks().every((t) => t.status === 'queued')).toBe(true)
+
+    ;(queue as unknown as { tasks: QueueTask[] }).tasks.push({
+      id: 'done_1',
+      url: 'https://done.example/1',
+      status: 'completed',
+      done: 1,
+      total: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    ;(queue as unknown as { tasks: QueueTask[] }).tasks.push({
+      id: 'fail_1',
+      url: 'https://fail.example/1',
+      status: 'failed',
+      done: 0,
+      total: 1,
+      error: 'HTTP 403',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    expect(queue.removeTask('done_1')).toBe(true)
+    expect(queue.removeTask('fail_1')).toBe(true)
+    expect(queue.removeTask('missing')).toBe(false)
+    expect(queue.removeTask(tasks[0]!.id)).toBe(false)
+
+    ;(queue as unknown as { tasks: QueueTask[] }).tasks.push({
+      id: 'done_2',
+      url: 'https://done.example/2',
+      status: 'completed',
+      done: 2,
+      total: 2,
+      createdAt: now,
+      updatedAt: now,
+    })
+    ;(queue as unknown as { tasks: QueueTask[] }).tasks.push({
+      id: 'fail_2',
+      url: 'https://fail.example/2',
+      status: 'failed',
+      done: 0,
+      total: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    expect(queue.clearCompleted()).toBe(1)
+    expect(queue.clearFailed()).toBe(1)
+    expect(queue.listTasks().every((t) => t.status === 'queued')).toBe(true)
   })
 })

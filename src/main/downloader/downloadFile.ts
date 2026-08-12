@@ -2,7 +2,7 @@ import { createWriteStream } from 'node:fs'
 import { access, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { finished } from 'node:stream/promises'
-import { httpFetch } from '../http/client'
+import { httpFetch, getPreferCurl, curlDownloadToFile } from '../http/client'
 
 export interface DownloadFileResult {
   bytes: number
@@ -16,6 +16,13 @@ export type DownloadFileProgress = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function retryDelayMs(err: unknown, attempt: number): number {
+  const msg = err instanceof Error ? err.message : String(err)
+  const rateLimited = /HTTP 429|HTTP 502|HTTP 503|HTTP 403/.test(msg)
+  const base = rateLimited ? 2000 : 400
+  return base * 2 ** attempt
 }
 
 async function partialSize(partPath: string): Promise<number> {
@@ -101,6 +108,61 @@ async function streamBodyToPart(
   return received
 }
 
+async function downloadViaCurl(
+  url: string,
+  partPath: string,
+  destPath: string,
+  baseHeaders: Record<string, string>,
+  opts?: {
+    signal?: AbortSignal
+    onProgress?: (p: DownloadFileProgress) => void
+  },
+): Promise<DownloadFileResult> {
+  await mkdir(dirname(destPath), { recursive: true })
+  const curlResult = await curlDownloadToFile(
+    url,
+    partPath,
+    {
+      signal: opts?.signal,
+      headers: baseHeaders,
+    },
+    {
+      signal: opts?.signal,
+      onProgress: ({ received }) => {
+        opts?.onProgress?.({ received, total: null })
+      },
+    },
+  )
+
+  if (curlResult.status === 404) {
+    throw new Error(`资源不存在 (HTTP 404)，图床可能已失效: ${url}`)
+  }
+  if (curlResult.status === 403 || curlResult.status === 429 || curlResult.status >= 500) {
+    throw new Error(`HTTP ${curlResult.status}`)
+  }
+  if (curlResult.status !== 200 && curlResult.status !== 206) {
+    throw new Error(`HTTP ${curlResult.status} downloading ${url}`)
+  }
+
+  const contentType = curlResult.contentType
+  if (contentType && contentType.includes('text/html')) {
+    throw new Error(`Expected image but got HTML from ${url}`)
+  }
+  if (curlResult.bytes < 1024) {
+    await unlink(partPath).catch(() => undefined)
+    throw new Error(`Downloaded file too small (${curlResult.bytes} bytes): ${url}`)
+  }
+
+  await unlink(destPath).catch(() => undefined)
+  await rename(partPath, destPath)
+  await access(destPath)
+
+  return {
+    bytes: curlResult.bytes,
+    contentType,
+  }
+}
+
 export async function downloadFile(
   url: string,
   destPath: string,
@@ -137,6 +199,14 @@ export async function downloadFile(
         baseHeaders.Range = `bytes=${offset}-`
       }
 
+      // xchina CDN hotlink protection blocks undici on Windows; curl is required there.
+      if (getPreferCurl()) {
+        return await downloadViaCurl(url, partPath, destPath, baseHeaders, {
+          signal: opts?.signal,
+          onProgress: opts?.onProgress,
+        })
+      }
+
       const res = await httpFetch(
         url,
         {
@@ -145,6 +215,13 @@ export async function downloadFile(
         },
         { disableCurl: true },
       )
+
+      if (res.status === 403 || res.status === 429) {
+        return await downloadViaCurl(url, partPath, destPath, baseHeaders, {
+          signal: opts?.signal,
+          onProgress: opts?.onProgress,
+        })
+      }
 
       if (res.status === 404) {
         throw new Error(`资源不存在 (HTTP 404)，图床可能已失效: ${url}`)
@@ -204,7 +281,8 @@ export async function downloadFile(
     } catch (err) {
       lastError = err
       if (opts?.signal?.aborted) throw err
-      const delay = 400 * 2 ** attempt
+      await unlink(partPath).catch(() => undefined)
+      const delay = retryDelayMs(err, attempt)
       await sleep(delay)
     }
   }

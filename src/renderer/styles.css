@@ -2655,6 +2655,91 @@ input:focus-visible {
   color: var(--muted);
   font-size: 0.88rem;
 }
+.queue-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-deep) 55%, var(--surface));
+}
+.queue-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.queue-tab:hover {
+  color: var(--fg);
+  background: var(--hover-fill);
+}
+.queue-tab.active {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  font-weight: 650;
+}
+.queue-tab .nav-count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+.queue-tab.active .nav-count {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.queue-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.queue-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.queue-section-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.queue-section-count {
+  min-width: 1.5rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.queue-section-empty {
+  margin: 0;
+  padding: 8px 2px 0;
+}
 .task-list {
   list-style: none;
   display: flex;
@@ -2688,8 +2773,40 @@ input:focus-visible {
 .task-item.status-failed {
   border-color: oklch(68% 0.18 25 / 0.35);
 }
+.task-item.status-completed,
 .task-item.status-done {
   opacity: 0.88;
+}
+.task-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.task-title-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.task-source-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: oklch(100% 0 0 / 0.06);
+  border: 1px solid oklch(100% 0 0 / 0.08);
+}
+.task-action-group {
+  display: inline-flex;
+  gap: 4px;
+}
+.queue-toolbar-actions {
+  justify-content: flex-end;
 }
 .task-main {
   flex: 1;
@@ -3179,6 +3296,91 @@ input:focus-visible {
   color: var(--muted);
   font-size: 0.88rem;
 }
+.queue-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-deep) 55%, var(--surface));
+}
+.queue-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.queue-tab:hover {
+  color: var(--fg);
+  background: var(--hover-fill);
+}
+.queue-tab.active {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  font-weight: 650;
+}
+.queue-tab .nav-count {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+.queue-tab.active .nav-count {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.queue-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.queue-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.queue-section-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.queue-section-count {
+  min-width: 1.5rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.queue-section-empty {
+  margin: 0;
+  padding: 8px 2px 0;
+}
 .task-list {
   list-style: none;
   display: flex;
@@ -3209,7 +3411,49 @@ input:focus-visible {
   box-shadow: inset 3px 0 0 color-mix(in oklab, var(--muted) 50%, transparent);
 }
 .task-item.status-failed { box-shadow: inset 3px 0 0 var(--danger); }
+.task-item.status-completed,
 .task-item.status-done { opacity: 0.88; }
+.task-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.task-title-block strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-title-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.task-source-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--fg) 6%, transparent);
+  border: 1px solid var(--border);
+}
+.task-action-group {
+  display: inline-flex;
+  gap: 4px;
+}
+.queue-toolbar-actions {
+  justify-content: flex-end;
+}
+.task-actions .btn.tiny.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
 .task-main {
   flex: 1;
   min-width: 0;

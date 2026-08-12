@@ -653,6 +653,36 @@ export function registerIpc(): void {
     return n
   })
 
+  ipcMain.handle('queue:pauseAllActive', async () => {
+    const n = queue.pauseAllActive()
+    broadcastTasks()
+    return n
+  })
+
+  ipcMain.handle('queue:resumeAllPaused', async () => {
+    const n = queue.resumeAllPaused()
+    broadcastTasks()
+    return n
+  })
+
+  ipcMain.handle('queue:removeTask', async (_e, taskId: string) => {
+    const ok = queue.removeTask(taskId)
+    broadcastTasks()
+    return ok
+  })
+
+  ipcMain.handle('queue:clearCompleted', async () => {
+    const n = queue.clearCompleted()
+    broadcastTasks()
+    return n
+  })
+
+  ipcMain.handle('queue:clearFailed', async () => {
+    const n = queue.clearFailed()
+    broadcastTasks()
+    return n
+  })
+
   ipcMain.handle('queue:list', async () => queue.listTasks())
 
   ipcMain.handle('resources:discover', async (_e, source: DownloadSource, urls: string[]) => {

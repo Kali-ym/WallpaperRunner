@@ -157,6 +157,11 @@ const api = {
   retryTask: (taskId: string): Promise<void> =>
     ipcRenderer.invoke('queue:retryTask', taskId),
   retryAllFailed: (): Promise<number> => ipcRenderer.invoke('queue:retryAllFailed'),
+  pauseAllActive: (): Promise<number> => ipcRenderer.invoke('queue:pauseAllActive'),
+  resumeAllPaused: (): Promise<number> => ipcRenderer.invoke('queue:resumeAllPaused'),
+  removeTask: (taskId: string): Promise<boolean> => ipcRenderer.invoke('queue:removeTask', taskId),
+  clearCompleted: (): Promise<number> => ipcRenderer.invoke('queue:clearCompleted'),
+  clearFailed: (): Promise<number> => ipcRenderer.invoke('queue:clearFailed'),
   listTasks: (): Promise<QueueTask[]> => ipcRenderer.invoke('queue:list'),
   discoverResources: (source: DownloadSource, urls: string[]): Promise<ResourceManifest> =>
     ipcRenderer.invoke('resources:discover', source, urls),

@@ -39,6 +39,7 @@ let seq = 0
 
 interface InternalTask extends QueueTask {
   overwrite?: boolean
+  fillMissing?: boolean
 }
 
 export class DownloadQueue extends EventEmitter {
@@ -237,18 +238,21 @@ export class DownloadQueue extends EventEmitter {
   retryTask(taskId: string): void {
     const task = this.tasks.find((t) => t.id === taskId)
     if (!task) return
-    if (task.status !== 'failed' && task.status !== 'cancelled') return
+    if (task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'completed') return
+    const partial = Boolean(task.error?.includes('部分下载失败'))
     this.patch(taskId, {
       status: 'queued',
       error: undefined,
-      done: 0,
-      percent: 0,
-      bytesReceived: undefined,
-      bytesTotal: undefined,
+      done: partial ? task.done : 0,
+      percent: partial ? task.percent : 0,
+      bytesReceived: partial ? task.bytesReceived : undefined,
+      bytesTotal: partial ? task.bytesTotal : undefined,
       bytesPerSec: undefined,
       etaSec: undefined,
-      files: undefined,
+      files: partial ? task.files : undefined,
     })
+    task.fillMissing = partial
+    if (!partial) task.overwrite = undefined
     this.emitUpdate()
     void this.pump()
   }
@@ -256,24 +260,89 @@ export class DownloadQueue extends EventEmitter {
   retryAllFailed(): number {
     let n = 0
     for (const t of this.tasks) {
-      if (t.status !== 'failed') continue
+      if (t.status !== 'failed' && !(t.status === 'completed' && t.error?.includes('部分下载失败'))) {
+        continue
+      }
+      const partial = Boolean(t.error?.includes('部分下载失败'))
       this.patch(t.id, {
         status: 'queued',
         error: undefined,
-        done: 0,
-        percent: 0,
-        bytesReceived: undefined,
-        bytesTotal: undefined,
+        done: partial ? t.done : 0,
+        percent: partial ? t.percent : 0,
+        bytesReceived: partial ? t.bytesReceived : undefined,
+        bytesTotal: partial ? t.bytesTotal : undefined,
         bytesPerSec: undefined,
         etaSec: undefined,
-        files: undefined,
+        files: partial ? t.files : undefined,
       })
+      t.fillMissing = partial
+      if (!partial) t.overwrite = undefined
       n += 1
     }
     if (n > 0) {
       this.emitUpdate()
       void this.pump()
     }
+    return n
+  }
+
+  pauseAllActive(): number {
+    let n = 0
+    for (const t of this.tasks) {
+      if (
+        t.status !== 'queued' &&
+        t.status !== 'resolving' &&
+        t.status !== 'downloading'
+      ) {
+        continue
+      }
+      this.pauseTask(t.id)
+      n += 1
+    }
+    return n
+  }
+
+  resumeAllPaused(): number {
+    let n = 0
+    for (const t of this.tasks) {
+      if (t.status !== 'paused') continue
+      this.resumeTask(t.id)
+      n += 1
+    }
+    return n
+  }
+
+  removeTask(taskId: string): boolean {
+    const task = this.tasks.find((t) => t.id === taskId)
+    if (!task) return false
+    if (
+      task.status !== 'completed' &&
+      task.status !== 'failed' &&
+      task.status !== 'cancelled' &&
+      task.status !== 'skipped'
+    ) {
+      return false
+    }
+    this.tasks = this.tasks.filter((t) => t.id !== taskId)
+    this.emitUpdate()
+    return true
+  }
+
+  clearCompleted(): number {
+    const before = this.tasks.length
+    this.tasks = this.tasks.filter(
+      (t) => t.status !== 'completed' && t.status !== 'skipped' && t.status !== 'cancelled',
+    )
+    const n = before - this.tasks.length
+    if (n > 0) this.emitUpdate()
+    return n
+  }
+
+  clearFailed(): number {
+    const before = this.tasks.length
+    this.tasks = this.tasks.filter((t) => t.status !== 'failed')
+    const n = before - this.tasks.length
+    if (n > 0) this.emitUpdate()
     return n
   }
 
@@ -444,8 +513,8 @@ export class DownloadQueue extends EventEmitter {
         galleryId: parsed.galleryId,
         title: parsed.title,
         total: parsed.images.length,
-        done: 0,
-        percent: 0,
+        done: task.fillMissing ? task.done : 0,
+        percent: task.fillMissing ? task.percent : 0,
         files: parsed.images.map((img, i) => ({
           id: `img_${i}`,
           name: String(i + 1).padStart(3, '0'),
@@ -456,15 +525,18 @@ export class DownloadQueue extends EventEmitter {
 
       const existing = await this.opts.store.getGallery(parsed.source, parsed.galleryId)
       const overwrite = Boolean(task.overwrite || (existing && existing.images.length === 0))
+      const fillMissing = Boolean(task.fillMissing)
       const rates = {
         byteRate: new RateTracker(),
         bytesDownloaded: { n: 0 },
       }
 
-      const meta = await downloadGallery(parsed, this.opts.store, {
-        concurrency: this.opts.imageConcurrency,
+      const downloadOpts = {
+        concurrency: fillMissing ? Math.min(2, this.opts.imageConcurrency) : this.opts.imageConcurrency,
         signal: ac.signal,
         overwrite,
+        fillMissing,
+        failedRetries: 3,
         onProgress: ({ done, total, failed, file, bytesDelta }) => {
           if (file) {
             this.mergeFileProgress(task.id, file, rates, done, total, failed, bytesDelta)
@@ -479,7 +551,30 @@ export class DownloadQueue extends EventEmitter {
             this.emitUpdate()
           }
         },
-      })
+      }
+
+      let meta
+      try {
+        meta = await downloadGallery(parsed, this.opts.store, downloadOpts)
+      } catch (err) {
+        if (
+          !ac.signal.aborted &&
+          !fillMissing &&
+          err instanceof Error &&
+          (err as Error & { partialMeta?: unknown }).partialMeta
+        ) {
+          meta = await downloadGallery(parsed, this.opts.store, {
+            ...downloadOpts,
+            fillMissing: true,
+            concurrency: Math.min(2, this.opts.imageConcurrency),
+            failedRetries: 2,
+          })
+        } else {
+          throw err
+        }
+      } finally {
+        task.fillMissing = undefined
+      }
 
       this.patch(task.id, {
         status: 'completed',
@@ -487,6 +582,7 @@ export class DownloadQueue extends EventEmitter {
         total: parsed.images.length,
         percent: 100,
         etaSec: 0,
+        error: undefined,
       })
       this.emitUpdate()
       void this.emitAskExtract(task.id, meta)

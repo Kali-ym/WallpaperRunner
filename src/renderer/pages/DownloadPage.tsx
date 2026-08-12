@@ -37,9 +37,68 @@ function extractUrlsFromDrop(e: DragEvent): string[] {
   return [...new Set(found)]
 }
 
+const ACTIVE_QUEUE_STATUSES = new Set<QueueTask['status']>([
+  'queued',
+  'resolving',
+  'downloading',
+  'paused',
+  'failed',
+])
+const DONE_QUEUE_STATUSES = new Set<QueueTask['status']>(['completed', 'skipped', 'cancelled'])
+
+const ACTIVE_SORT: Partial<Record<QueueTask['status'], number>> = {
+  downloading: 0,
+  resolving: 1,
+  queued: 2,
+  paused: 3,
+  failed: 4,
+}
+
+function sortActiveTasks(tasks: QueueTask[]): QueueTask[] {
+  return [...tasks].sort((a, b) => {
+    const rankA = ACTIVE_SORT[a.status] ?? 9
+    const rankB = ACTIVE_SORT[b.status] ?? 9
+    if (rankA !== rankB) return rankA - rankB
+    return a.createdAt.localeCompare(b.createdAt)
+  })
+}
+
+function sortCompletedTasks(tasks: QueueTask[]): QueueTask[] {
+  return [...tasks].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
+type QueueTaskHandlers = {
+  onCancel: (id: string) => void
+  onPause: (id: string) => void
+  onResume: (id: string) => void
+  onMove: (id: string, direction: 'up' | 'down') => void
+  onRetry: (id: string) => void
+  onRemove: (id: string) => void
+}
+
+function renderTaskList(tasks: QueueTask[], handlers: QueueTaskHandlers): JSX.Element {
+  return (
+    <ul className="task-list" aria-live="polite">
+      {tasks.map((t) => (
+        <QueueTaskRow
+          key={t.id}
+          task={t}
+          onCancel={handlers.onCancel}
+          onPause={handlers.onPause}
+          onResume={handlers.onResume}
+          onMove={handlers.onMove}
+          onRetry={handlers.onRetry}
+          onRemove={handlers.onRemove}
+        />
+      ))}
+    </ul>
+  )
+}
+
 export default function DownloadPage(): JSX.Element {
   const toast = useToast()
   const [segment, setSegment] = useState<'enqueue' | 'queue'>('enqueue')
+  const [queueTab, setQueueTab] = useState<'active' | 'done'>('active')
   const [source, setSource] = useState<DownloadSource>('xchina')
   const [text, setText] = useState('')
   const [tasks, setTasks] = useState<QueueTask[]>([])
@@ -53,9 +112,30 @@ export default function DownloadPage(): JSX.Element {
   const [extractError, setExtractError] = useState('')
 
   const failedCount = tasks.filter((t) => t.status === 'failed').length
+  const partialCount = tasks.filter(
+    (t) => t.status === 'completed' && Boolean(t.error?.includes('部分下载失败')),
+  ).length
   const activeCount = tasks.filter((t) =>
     ['queued', 'resolving', 'downloading', 'paused'].includes(t.status),
   ).length
+  const pausedCount = tasks.filter((t) => t.status === 'paused').length
+  const runningCount = tasks.filter((t) =>
+    ['queued', 'resolving', 'downloading'].includes(t.status),
+  ).length
+  const activeTasks = sortActiveTasks(tasks.filter((t) => ACTIVE_QUEUE_STATUSES.has(t.status)))
+  const completedTasks = sortCompletedTasks(tasks.filter((t) => DONE_QUEUE_STATUSES.has(t.status)))
+  const taskHandlers: QueueTaskHandlers = {
+    onCancel: (id) => void api.cancelTask(id),
+    onPause: (id) => void api.pauseTask(id),
+    onResume: (id) => void api.resumeTask(id),
+    onMove: (id, dir) => void api.moveTask(id, dir),
+    onRetry: (id) => void api.retryTask(id),
+    onRemove: (id) => {
+      void api.removeTask(id).then((ok) => {
+        if (ok) toast.success('已移除任务')
+      })
+    },
+  }
 
   useEffect(() => {
     void api.listTasks().then(setTasks)
@@ -217,7 +297,10 @@ export default function DownloadPage(): JSX.Element {
               className={segment === 'queue' ? 'work-nav-btn active' : 'work-nav-btn'}
               role="tab"
               aria-selected={segment === 'queue'}
-              onClick={() => setSegment('queue')}
+              onClick={() => {
+                setQueueTab('active')
+                setSegment('queue')
+              }}
             >
               <span>队列</span>
               {activeCount > 0 ? <span className="nav-count">{activeCount}</span> : null}
@@ -304,7 +387,10 @@ export default function DownloadPage(): JSX.Element {
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      onClick={() => setSegment('queue')}
+                      onClick={() => {
+                        setQueueTab('active')
+                        setSegment('queue')
+                      }}
                     >
                       查看队列
                     </button>
@@ -317,45 +403,154 @@ export default function DownloadPage(): JSX.Element {
             {segment === 'queue' ? (
               <div className="work-pane active">
                 <h3 className="pane-title">下载队列</h3>
+                {tasks.length > 0 ? (
+                  <div
+                    className="queue-tabs"
+                    role="tablist"
+                    aria-label="队列分类"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={queueTab === 'active'}
+                      className={queueTab === 'active' ? 'queue-tab active' : 'queue-tab'}
+                      onClick={() => setQueueTab('active')}
+                    >
+                      <span>下载中</span>
+                      {activeTasks.length > 0 ? (
+                        <span className="nav-count">{activeTasks.length}</span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={queueTab === 'done'}
+                      className={queueTab === 'done' ? 'queue-tab active' : 'queue-tab'}
+                      onClick={() => setQueueTab('done')}
+                    >
+                      <span>已完成</span>
+                      {completedTasks.length > 0 ? (
+                        <span className="nav-count">{completedTasks.length}</span>
+                      ) : null}
+                    </button>
+                  </div>
+                ) : null}
                 <div className="queue-toolbar">
                   <p className="lead-sm">
                     {tasks.length === 0
                       ? '下载列表'
-                      : `共 ${tasks.length} 项${activeCount > 0 ? ` · ${activeCount} 进行中` : ''}`}
+                      : queueTab === 'active'
+                        ? runningCount > 0
+                          ? `${runningCount} 个任务运行中${pausedCount > 0 ? ` · ${pausedCount} 已暂停` : ''}${failedCount > 0 ? ` · ${failedCount} 失败` : ''}`
+                          : pausedCount > 0
+                            ? `${pausedCount} 个任务已暂停${failedCount > 0 ? ` · ${failedCount} 失败` : ''}`
+                            : failedCount > 0
+                              ? `${failedCount} 个任务失败`
+                              : '暂无进行中的任务'
+                        : completedTasks.length > 0
+                          ? `${completedTasks.length} 个任务已完成`
+                          : '暂无已完成任务'}
                   </p>
-                  <div className="row">
-                    {failedCount > 0 ? (
+                  <div className="row queue-toolbar-actions">
+                    {queueTab === 'active' && runningCount > 0 ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          void api.pauseAllActive().then((n) => {
+                            toast.success(n > 0 ? `已暂停 ${n} 个任务` : '没有可暂停的任务')
+                          })
+                        }}
+                      >
+                        全部暂停
+                      </button>
+                    ) : null}
+                    {queueTab === 'active' && pausedCount > 0 ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          void api.resumeAllPaused().then((n) => {
+                            toast.success(n > 0 ? `已继续 ${n} 个任务` : '没有已暂停的任务')
+                          })
+                        }}
+                      >
+                        全部继续
+                      </button>
+                    ) : null}
+                    {queueTab === 'active' && failedCount > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            void api.retryAllFailed().then((n) => {
+                              toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
+                            })
+                          }}
+                        >
+                          重试全部失败
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            void api.clearFailed().then((n) => {
+                              toast.success(n > 0 ? `已清除 ${n} 个失败任务` : '没有失败任务')
+                            })
+                          }}
+                        >
+                          清除失败
+                        </button>
+                      </>
+                    ) : null}
+                    {queueTab === 'done' && partialCount > 0 ? (
                       <button
                         type="button"
                         className="btn btn-ghost"
                         disabled={busy}
                         onClick={() => {
                           void api.retryAllFailed().then((n) => {
-                            toast.success(n > 0 ? `已重试 ${n} 个失败任务` : '没有失败任务')
+                            toast.success(n > 0 ? `已补全 ${n} 个任务` : '没有需要补全的任务')
+                            setQueueTab('active')
                           })
                         }}
                       >
-                        重试全部失败
+                        补全全部失败
+                      </button>
+                    ) : null}
+                    {queueTab === 'done' && completedTasks.length > 0 ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          void api.clearCompleted().then((n) => {
+                            toast.success(n > 0 ? `已清空 ${n} 个已完成任务` : '没有已完成任务')
+                          })
+                        }}
+                      >
+                        清空已完成
                       </button>
                     ) : null}
                   </div>
                 </div>
                 {tasks.length === 0 ? (
                   <p className="empty-hint">队列为空</p>
+                ) : queueTab === 'active' ? (
+                  activeTasks.length > 0 ? (
+                    renderTaskList(activeTasks, taskHandlers)
+                  ) : (
+                    <p className="empty-hint">暂无进行中的任务</p>
+                  )
+                ) : completedTasks.length > 0 ? (
+                  renderTaskList(completedTasks, taskHandlers)
                 ) : (
-                  <ul className="task-list" aria-live="polite" aria-label="下载列表">
-                    {tasks.map((t) => (
-                      <QueueTaskRow
-                        key={t.id}
-                        task={t}
-                        onCancel={(id) => void api.cancelTask(id)}
-                        onPause={(id) => void api.pauseTask(id)}
-                        onResume={(id) => void api.resumeTask(id)}
-                        onMove={(id, dir) => void api.moveTask(id, dir)}
-                        onRetry={(id) => void api.retryTask(id)}
-                      />
-                    ))}
-                  </ul>
+                  <p className="empty-hint">暂无已完成任务</p>
                 )}
               </div>
             ) : null}

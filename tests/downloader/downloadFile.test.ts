@@ -6,6 +6,8 @@ vi.mock('@main/http/client', () => ({
   httpFetch: vi.fn(),
   setHttpProxy: vi.fn(),
   getHttpProxy: vi.fn(() => null),
+  getPreferCurl: vi.fn(() => false),
+  curlDownloadToFile: vi.fn(),
 }))
 
 import { httpFetch } from '@main/http/client'

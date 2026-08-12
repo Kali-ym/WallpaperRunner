@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { QueueTask } from '../lib/api'
 
 const statusLabel: Record<QueueTask['status'], string> = {
@@ -10,6 +10,12 @@ const statusLabel: Record<QueueTask['status'], string> = {
   failed: '失败',
   skipped: '跳过',
   cancelled: '已取消',
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  xchina: 'xChina',
+  telegram: 'Telegram',
+  telegraph: 'Telegraph',
 }
 
 function formatSpeed(bps?: number): string {
@@ -41,6 +47,13 @@ const fileStatusLabel: Record<string, string> = {
   failed: '失败',
 }
 
+function statusBadgeClass(status: QueueTask['status']): string {
+  if (status === 'completed' || status === 'skipped') return 'status-badge ok'
+  if (status === 'failed' || status === 'cancelled') return 'status-badge bad'
+  if (status === 'downloading' || status === 'resolving') return 'status-badge warn'
+  return 'status-badge'
+}
+
 export type QueueTaskRowProps = {
   task: QueueTask
   onCancel: (id: string) => void
@@ -48,6 +61,7 @@ export type QueueTaskRowProps = {
   onResume?: (id: string) => void
   onMove?: (id: string, direction: 'up' | 'down') => void
   onRetry?: (id: string) => void
+  onRemove?: (id: string) => void
 }
 
 export default function QueueTaskRow({
@@ -57,8 +71,13 @@ export default function QueueTaskRow({
   onResume,
   onMove,
   onRetry,
+  onRemove,
 }: QueueTaskRowProps): JSX.Element {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(task.status === 'failed')
+  useEffect(() => {
+    if (task.status === 'failed') setOpen(true)
+  }, [task.status])
+
   const percent =
     task.percent ??
     (task.bytesTotal && task.bytesTotal > 0 && task.bytesReceived != null
@@ -76,8 +95,16 @@ export default function QueueTaskRow({
   const canResume = task.status === 'paused'
   const canMove = task.status === 'queued' || task.status === 'paused'
   const canRetry = task.status === 'failed' || task.status === 'cancelled'
+  const canFillPartial =
+    task.status === 'completed' && Boolean(task.error?.includes('部分下载失败'))
+  const canRemove =
+    task.status === 'completed' ||
+    task.status === 'failed' ||
+    task.status === 'cancelled' ||
+    task.status === 'skipped'
   const speed = formatSpeed(task.bytesPerSec)
   const eta = formatEta(task.etaSec)
+  const source = task.source ? SOURCE_LABEL[task.source] ?? task.source : ''
   const sizeLabel =
     task.bytesReceived != null &&
     (task.status === 'downloading' || task.status === 'completed' || task.status === 'paused')
@@ -88,44 +115,48 @@ export default function QueueTaskRow({
   const showBar =
     (task.status === 'downloading' || task.status === 'resolving' || task.status === 'paused') &&
     (Boolean(task.bytesTotal && task.bytesTotal > 0) || task.total > 0)
+  const failedFiles = task.files?.filter((f) => f.status === 'failed').length ?? 0
 
   return (
     <li className={`task-item status-${task.status}`}>
       <div className="task-main">
         <div className="task-title-row">
-          <strong>{task.title || task.url}</strong>
-          {task.files && task.files.length > 0 ? (
-            <button type="button" className="btn tiny" onClick={() => setOpen((v) => !v)}>
-              {open ? '收起' : '明细'}
-            </button>
-          ) : null}
+          <div className="task-title-block">
+            {source ? <span className="task-source-chip">{source}</span> : null}
+            <strong title={task.title || task.url}>{task.title || task.url}</strong>
+          </div>
+          <div className="task-title-tools">
+            <span className={statusBadgeClass(task.status)}>{statusLabel[task.status]}</span>
+            {task.files && task.files.length > 0 ? (
+              <button type="button" className="btn tiny" onClick={() => setOpen((v) => !v)}>
+                {open ? '收起' : '明细'}
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="task-meta muted">
-          <span>{statusLabel[task.status]}</span>
-          {sizeLabel ? (
-            <span className="mono-num">
-              · {sizeLabel}
-              {task.bytesTotal && task.bytesTotal > 0 ? ` · ${percent}%` : ''}
-            </span>
-          ) : task.total > 0 ? (
-            <span className="mono-num">
-              · {task.done}/{task.total}
+          {task.total > 0 ? (
+            <span className="mono-num st is-run">
+              {task.done}/{task.total} 文件
             </span>
           ) : null}
-          {task.total > 0 && sizeLabel ? (
+          {sizeLabel ? (
             <span className="mono-num">
-              · {task.done}/{task.total} 文件
+              {task.total > 0 ? ' · ' : ''}
+              {sizeLabel}
+              {task.bytesTotal && task.bytesTotal > 0 ? ` · ${percent}%` : ''}
             </span>
           ) : null}
           {speed ? <span className="mono-num"> · {speed}</span> : null}
           {eta && task.status === 'downloading' ? <span className="mono-num"> · {eta}</span> : null}
+          {failedFiles > 0 ? <span className="mono-num st is-fail"> · 失败 {failedFiles}</span> : null}
         </div>
         {showBar ? (
           <div className="progress-track" aria-hidden>
             <div className="progress-fill" style={{ transform: `scaleX(${percent / 100})` }} />
           </div>
         ) : null}
-        {task.error ? <span className="error-text">{task.error}</span> : null}
+        {task.error ? <p className="task-error">{task.error}</p> : null}
         {open && task.files ? (
           <ul className="task-files">
             {task.files.map((f) => (
@@ -133,13 +164,13 @@ export default function QueueTaskRow({
                 <span>{f.name}</span>
                 <span className="muted">{fileStatusLabel[f.status] ?? f.status}</span>
                 {f.bytesReceived != null || f.bytesTotal != null ? (
-                  <span className="mono-num muted">
+                  <span className="mono muted">
                     {f.bytesTotal && f.bytesTotal > 0
                       ? `${formatBytes(f.bytesReceived ?? 0)}/${formatBytes(f.bytesTotal)}`
                       : formatBytes(f.bytesReceived)}
                   </span>
                 ) : null}
-                {f.error ? <span className="error-text">{f.error}</span> : null}
+                {f.error ? <span className="task-error">{f.error}</span> : null}
               </li>
             ))}
           </ul>
@@ -147,38 +178,43 @@ export default function QueueTaskRow({
       </div>
       <div className="task-actions">
         {canMove && onMove ? (
-          <>
+          <div className="task-action-group">
             <button type="button" className="btn tiny" title="上移" onClick={() => onMove(task.id, 'up')}>
               ↑
             </button>
-            <button
-              type="button"
-              className="btn tiny"
-              title="下移"
-              onClick={() => onMove(task.id, 'down')}
-            >
+            <button type="button" className="btn tiny" title="下移" onClick={() => onMove(task.id, 'down')}>
               ↓
             </button>
-          </>
+          </div>
         ) : null}
         {canPause && onPause ? (
-          <button type="button" className="btn" onClick={() => onPause(task.id)}>
+          <button type="button" className="btn tiny" onClick={() => onPause(task.id)}>
             暂停
           </button>
         ) : null}
         {canResume && onResume ? (
-          <button type="button" className="btn primary" onClick={() => onResume(task.id)}>
+          <button type="button" className="btn tiny primary" onClick={() => onResume(task.id)}>
             继续
           </button>
         ) : null}
         {canRetry && onRetry ? (
-          <button type="button" className="btn primary" onClick={() => onRetry(task.id)}>
+          <button type="button" className="btn tiny primary" onClick={() => onRetry(task.id)}>
             重试
           </button>
         ) : null}
+        {canFillPartial && onRetry ? (
+          <button type="button" className="btn tiny primary" onClick={() => onRetry(task.id)}>
+            补全
+          </button>
+        ) : null}
         {canCancel ? (
-          <button type="button" className="btn" onClick={() => onCancel(task.id)}>
+          <button type="button" className="btn tiny" onClick={() => onCancel(task.id)}>
             取消
+          </button>
+        ) : null}
+        {canRemove && onRemove ? (
+          <button type="button" className="btn tiny" onClick={() => onRemove(task.id)}>
+            移除
           </button>
         ) : null}
       </div>
