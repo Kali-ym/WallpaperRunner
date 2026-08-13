@@ -37,6 +37,10 @@
   --line: var(--border);
   --shadow: var(--shadow-soft);
   --font-sans: var(--font-body);
+  --scrollbar-size: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: color-mix(in oklab, var(--accent) 34%, var(--border));
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--accent) 56%, var(--border));
 }
 
 [data-theme='light'] {
@@ -68,6 +72,8 @@
   --panel: var(--surface);
   --line: var(--border);
   --shadow: var(--shadow-soft);
+  --scrollbar-thumb: color-mix(in oklab, var(--accent) 30%, var(--border));
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--accent) 48%, var(--border));
 }
 
 
@@ -308,6 +314,8 @@ input:focus-visible {
   max-height: min(200px, 28vh);
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .rail-list-scroll {
   flex: 1 1 auto;
@@ -316,15 +324,28 @@ input:focus-visible {
   overscroll-behavior: contain;
   margin-right: -4px;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .rail-list-scroll::-webkit-scrollbar,
 .rail-list-playlists::-webkit-scrollbar {
   width: 6px;
+  display: block !important;
+}
+.rail-list-scroll::-webkit-scrollbar-track,
+.rail-list-playlists::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
 }
 .rail-list-scroll::-webkit-scrollbar-thumb,
 .rail-list-playlists::-webkit-scrollbar-thumb {
-  background: oklch(100% 0 0 / 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.rail-list-scroll::-webkit-scrollbar-thumb:hover,
+.rail-list-playlists::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 .rail-section-count {
   margin-left: auto;
@@ -640,15 +661,24 @@ input:focus-visible {
   flex: 1;
   min-height: 0;
   padding: 2px 4px 2px 2px;
-  scrollbar-width: auto;
-  scrollbar-color: color-mix(in oklab, var(--accent) 40%, transparent) transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .author-avatar-list-scroll::-webkit-scrollbar {
   width: 6px;
+  display: block !important;
+}
+.author-avatar-list-scroll::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
 }
 .author-avatar-list-scroll::-webkit-scrollbar-thumb {
-  border-radius: 99px;
-  background: color-mix(in oklab, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.author-avatar-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 .author-avatar-list-item {
   position: relative;
@@ -1584,12 +1614,59 @@ input:focus-visible {
   overflow: auto;
   padding: 10px 22px 100px;
 }
-.grid-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+
+/* Themed scrollbars — library main pane (authors / galleries / detail thumbs) */
+.library-main.authors-scroll,
+.gallery-grid-scroll,
+.library-main > .empty,
+.library-main > .skeleton-grid,
+.library-main > .gallery-list,
+.thumb-scroll,
+.grid-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+.library-main.authors-scroll::-webkit-scrollbar,
+.gallery-grid-scroll::-webkit-scrollbar,
+.library-main > .empty::-webkit-scrollbar,
+.library-main > .skeleton-grid::-webkit-scrollbar,
+.library-main > .gallery-list::-webkit-scrollbar,
+.thumb-scroll::-webkit-scrollbar,
+.grid-scroll::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  display: block !important;
+}
+.library-main.authors-scroll::-webkit-scrollbar-track,
+.gallery-grid-scroll::-webkit-scrollbar-track,
+.library-main > .empty::-webkit-scrollbar-track,
+.library-main > .skeleton-grid::-webkit-scrollbar-track,
+.library-main > .gallery-list::-webkit-scrollbar-track,
+.thumb-scroll::-webkit-scrollbar-track,
+.grid-scroll::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+.library-main.authors-scroll::-webkit-scrollbar-thumb,
+.gallery-grid-scroll::-webkit-scrollbar-thumb,
+.library-main > .empty::-webkit-scrollbar-thumb,
+.library-main > .skeleton-grid::-webkit-scrollbar-thumb,
+.library-main > .gallery-list::-webkit-scrollbar-thumb,
+.thumb-scroll::-webkit-scrollbar-thumb,
 .grid-scroll::-webkit-scrollbar-thumb {
-  background: oklch(100% 0 0 / 0.12);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
+}
+.library-main.authors-scroll::-webkit-scrollbar-thumb:hover,
+.gallery-grid-scroll::-webkit-scrollbar-thumb:hover,
+.library-main > .empty::-webkit-scrollbar-thumb:hover,
+.library-main > .skeleton-grid::-webkit-scrollbar-thumb:hover,
+.library-main > .gallery-list::-webkit-scrollbar-thumb:hover,
+.thumb-scroll::-webkit-scrollbar-thumb:hover,
+.grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .grid {
@@ -1813,15 +1890,6 @@ input:focus-visible {
   min-height: 0;
   overflow: auto;
   padding: 10px 22px 100px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.library-main > .empty::-webkit-scrollbar,
-.library-main > .skeleton-grid::-webkit-scrollbar,
-.library-main > .gallery-list::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
 }
 .gallery-detail {
   display: flex;
@@ -4748,14 +4816,364 @@ html, body, #root {
   filter: brightness(1.08);
 }
 
+/* Resource picker (Telegram / Telegraph parse) */
+.resource-drawer-root {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
   display: grid;
-  gap: 4px;
-  font-size: 0.85rem;
-  padding: 10px 12px;
-  border-radius: 10px;
+  place-items: center;
+  padding: 20px;
+  background: var(--deep-scrim);
+  backdrop-filter: blur(10px);
+}
+.resource-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.resource-drawer-panel {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, 100%);
+  height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+.resource-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.resource-drawer-heading {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.resource-source-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
+}
+.resource-drawer-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.resource-drawer-url {
+  margin: 0;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-drawer-close {
+  flex-shrink: 0;
+}
+.resource-drawer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-tint);
+}
+.resource-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.resource-toolbar-stat {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.resource-toolbar-stat strong {
+  color: var(--accent-strong);
+  font-weight: 650;
+}
+.resource-drawer-error {
+  margin: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid color-mix(in oklab, var(--danger) 35%, var(--border));
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+}
+.resource-drawer-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(300px, 34%);
+}
+.resource-drawer-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+.resource-drawer-scroll::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  display: block !important;
+}
+.resource-drawer-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.resource-drawer-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+.resource-section {
+  margin-bottom: 22px;
+}
+.resource-section:last-child {
+  margin-bottom: 0;
+}
+.resource-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.resource-section-head h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  min-width: 0;
+}
+.resource-section-count {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 999px;
   background: var(--panel-tint);
   border: 1px solid var(--hairline);
 }
+.resource-origin-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--wash);
+}
+.resource-message-group {
+  margin-bottom: 24px;
+}
+.resource-message-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.resource-empty {
+  margin: 0;
+  padding: 12px 0;
+  font-size: 0.86rem;
+}
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 10px;
+}
+.resource-tile {
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+.resource-tile-check {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.resource-tile-media {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 2px solid var(--hairline);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.resource-tile:hover .resource-tile-media {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+.resource-tile.selected .resource-tile-media {
+  border-color: color-mix(in oklab, var(--accent) 70%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.resource-tile-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.resource-tile-ph {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
+}
+.resource-tile-kind {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #fff;
+  background: oklch(0% 0 0 / 0.55);
+  backdrop-filter: blur(4px);
+}
+.resource-tile-mark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: 0 2px 8px oklch(0% 0 0 / 0.25);
+}
+.resource-tile-name {
+  font-size: 0.74rem;
+  line-height: 1.25;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.resource-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: color-mix(in oklab, var(--panel-tint) 80%, var(--surface));
+}
+.resource-preview-empty {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.resource-preview-media {
+  flex: 1;
+  min-height: 160px;
+  max-height: 55%;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--bg-deep);
+}
+.resource-preview-media img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px oklch(0% 0 0 / 0.2);
+}
+.resource-preview-ph {
+  width: min(160px, 70%);
+  aspect-ratio: 1;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface-2));
+  border: 1px dashed color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+.resource-preview-meta {
+  margin: 0;
+  padding: 14px 16px 18px;
+  display: grid;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+.resource-preview-meta div {
+  display: grid;
+  gap: 2px;
+}
+.resource-preview-meta dt {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.resource-preview-meta dd {
+  margin: 0;
+  word-break: break-all;
+  line-height: 1.4;
+}
+.resource-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+@media (max-width: 860px) {
+  .resource-drawer-root {
+    padding: 0;
+  }
+  .resource-drawer-panel {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+  .resource-drawer-body {
+    grid-template-columns: 1fr;
+  }
+  .resource-preview {
+    display: none;
+  }
+}
+
 .drawer-root {
   position: fixed;
   inset: 0;
@@ -5211,22 +5629,12 @@ html, body, #root {
   position: static;
 }
 
-/* 隐藏主内容区滚动条，保留滚轮 */
-.gallery-grid-scroll,
-.grid-scroll,
-.thumb-scroll,
-.library-main > .empty,
-.library-main > .skeleton-grid,
+/* 侧栏 / 面板仍隐藏滚动条 */
 .panel,
 .rail {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.gallery-grid-scroll::-webkit-scrollbar,
-.grid-scroll::-webkit-scrollbar,
-.thumb-scroll::-webkit-scrollbar,
-.library-main > .empty::-webkit-scrollbar,
-.library-main > .skeleton-grid::-webkit-scrollbar,
 .panel::-webkit-scrollbar,
 .rail::-webkit-scrollbar {
   width: 0;

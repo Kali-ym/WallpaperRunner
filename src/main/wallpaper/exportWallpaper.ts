@@ -86,6 +86,7 @@ WE 无法直接读图库外的本地文件，因此需要本机媒体服务：
 
 async function copyMediaServerScript(dir: string): Promise<void> {
   const candidates = [
+    join(process.resourcesPath, 'we-media-server.mjs'),
     join(process.cwd(), 'scripts', 'we-media-server.mjs'),
     join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/we-media-server.mjs'),
   ]

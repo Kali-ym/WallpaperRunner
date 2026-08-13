@@ -67,6 +67,10 @@
       {
         "from": "build/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "scripts/we-media-server.mjs",
+        "to": "we-media-server.mjs"
       }
     ],
     "win": {
