@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type { ResourceManifest } from '../lib/api'
 import type { ResourceItem } from '../../main/resources/types'
 
@@ -48,30 +48,30 @@ function ItemTile({
   onPreview: (id: string) => void
 }): JSX.Element {
   return (
-    <label
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
       className={`resource-tile${checked ? ' selected' : ''}`}
+      onClick={() => onToggle(item.id)}
       onMouseEnter={() => onPreview(item.id)}
       onFocus={() => onPreview(item.id)}
     >
-      <input
-        type="checkbox"
-        className="resource-tile-check"
-        checked={checked}
-        onChange={() => onToggle(item.id)}
-      />
       <span className="resource-tile-media" aria-hidden>
         {item.previewUrl ? (
-          <img src={item.previewUrl} alt="" loading="lazy" />
+          <img src={item.previewUrl} alt="" loading="lazy" draggable={false} />
         ) : (
           <span className="resource-tile-ph">{kindLabel(item.kind).slice(0, 1)}</span>
         )}
         <span className="resource-tile-kind">{kindLabel(item.kind)}</span>
-        {checked ? <span className="resource-tile-mark">✓</span> : null}
+        <span className={`resource-tile-mark${checked ? ' visible' : ''}`} aria-hidden>
+          ✓
+        </span>
       </span>
       <span className="resource-tile-name" title={item.fileName ?? item.label}>
         {shortItemName(item, index)}
       </span>
-    </label>
+    </button>
   )
 }
 
@@ -226,29 +226,43 @@ export default function ResourceDrawer({
 }: ResourceDrawerProps): JSX.Element {
   const allItems = listItems(manifest)
   const [previewId, setPreviewId] = useState<string | null>(allItems[0]?.id ?? null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const preserveScrollRef = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (preserveScrollRef.current === null) return
+    const top = preserveScrollRef.current
+    preserveScrollRef.current = null
+    if (scrollRef.current) scrollRef.current.scrollTop = top
+  }, [selected])
 
   const previewItem = useMemo(() => {
     if (previewId) {
       const hit = allItems.find((i) => i.id === previewId)
       if (hit) return hit
     }
-    for (const id of selected) {
-      const hit = allItems.find((i) => i.id === id)
-      if (hit) return hit
-    }
     return allItems[0] ?? null
-  }, [allItems, previewId, selected])
+  }, [allItems, previewId])
 
   function selectByKinds(kinds: string[]): void {
-    onSelectIds(
+    handleSelectIds(
       allItems.filter((i) => kinds.includes(i.kind)).map((i) => i.id),
       'add',
     )
   }
 
+  function preserveScroll(): void {
+    preserveScrollRef.current = scrollRef.current?.scrollTop ?? 0
+  }
+
   function handleToggle(id: string): void {
-    setPreviewId(id)
+    preserveScroll()
     onToggle(id)
+  }
+
+  function handleSelectIds(ids: string[], mode?: 'replace' | 'add'): void {
+    preserveScroll()
+    onSelectIds(ids, mode)
   }
 
   return (
@@ -273,7 +287,7 @@ export default function ResourceDrawer({
             <button
               type="button"
               className="btn tiny"
-              onClick={() => onSelectIds(manifest.groups.post.map((i) => i.id), 'replace')}
+              onClick={() => handleSelectIds(manifest.groups.post.map((i) => i.id), 'replace')}
             >
               仅主帖
             </button>
@@ -281,7 +295,7 @@ export default function ResourceDrawer({
               type="button"
               className="btn tiny"
               onClick={() =>
-                onSelectIds(
+                handleSelectIds(
                   [
                     ...manifest.groups.post.map((i) => i.id),
                     ...manifest.groups.comments.flatMap((c) => c.items.map((i) => i.id)),
@@ -309,11 +323,11 @@ export default function ResourceDrawer({
             <button
               type="button"
               className="btn tiny"
-              onClick={() => onSelectIds(allItems.map((i) => i.id), 'replace')}
+              onClick={() => handleSelectIds(allItems.map((i) => i.id), 'replace')}
             >
               全选
             </button>
-            <button type="button" className="btn tiny" onClick={() => onSelectIds([], 'replace')}>
+            <button type="button" className="btn tiny" onClick={() => handleSelectIds([], 'replace')}>
               清空
             </button>
           </div>
@@ -325,7 +339,7 @@ export default function ResourceDrawer({
         {error ? <p className="error-text resource-drawer-error">{error}</p> : null}
 
         <div className="resource-drawer-body">
-          <div className="resource-drawer-scroll">
+          <div className="resource-drawer-scroll" ref={scrollRef}>
             {manifest.messageGroups && manifest.messageGroups.length > 0
               ? manifest.messageGroups.map((mg) => (
                   <div className="resource-message-group" key={mg.sourceUrl}>

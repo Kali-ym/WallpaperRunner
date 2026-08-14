@@ -32,4 +32,31 @@ describe('parseTelegraphHtml', () => {
     expect(parsed.assets[2].kind).toBe('telegraph_file')
     expect(parsed.assets[3].kind).toBe('telegraph_file')
   })
+
+  it('includes cover from og:image when first img uses lazy placeholder', () => {
+    const html = `
+<html><head>
+<meta property="og:image" content="https://telegra.ph/file/cover.jpg">
+</head><body>
+<article>
+<h1>Cover post</h1>
+<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" data-src="/file/cover.jpg">
+<img src="/file/second.jpg">
+</article>
+</body></html>`
+    const parsed = parseTelegraphHtml(html, 'https://telegra.ph/Cover-post-01-01')
+    expect(parsed.assets.map((a) => a.url)).toEqual([
+      'https://telegra.ph/file/cover.jpg',
+      'https://telegra.ph/file/second.jpg',
+    ])
+  })
+
+  it('reads lazy attributes when src is a placeholder', () => {
+    const html = `
+<html><body>
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="/file/only.jpg">
+</body></html>`
+    const parsed = parseTelegraphHtml(html, 'https://telegra.ph/Lazy-01-01')
+    expect(parsed.assets.map((a) => a.url)).toEqual(['https://telegra.ph/file/only.jpg'])
+  })
 })

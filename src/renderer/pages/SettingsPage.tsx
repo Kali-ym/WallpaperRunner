@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { useToast } from '../lib/toast'
 import { api, type AppSettings, type TelegramAuthStatus } from '../lib/api'
 import { emitThemeChanged, type ThemePreference } from '../lib/theme'
@@ -28,22 +28,42 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [group, setGroup] = useState<'general' | 'network' | 'telegram' | 'wallpaper'>('general')
+  const [tgBusy, setTgBusy] = useState(false)
+  const persistedRef = useRef<AppSettings | null>(null)
 
   useEffect(() => {
     if (!active) return
-    void api.getSettings().then(setSettings)
+    void api.getSettings().then((s) => {
+      setSettings(s)
+      persistedRef.current = s
+    })
     void api.telegramStatus().then(setTgStatus)
   }, [active])
 
-  async function save(partial: Partial<AppSettings>): Promise<void> {
-    if (settings) {
+  async function save(partial: Partial<AppSettings>, quiet = false): Promise<AppSettings> {
+    const base = persistedRef.current ?? settings
+    if (base) {
       const keys = Object.keys(partial) as (keyof AppSettings)[]
-      if (keys.length > 0 && keys.every((k) => settings[k] === partial[k])) return
+      if (keys.length > 0 && keys.every((k) => base[k] === partial[k])) return base
     }
     const next = await api.setSettings(partial)
     setSettings(next)
+    persistedRef.current = next
     if (partial.theme) emitThemeChanged(partial.theme)
-    toast.success('已保存')
+    if (!quiet) toast.success('已保存')
+    return next
+  }
+
+  async function persistTelegramCreds(): Promise<AppSettings> {
+    if (!settings) throw new Error('设置尚未加载')
+    return save(
+      {
+        telegramApiId: settings.telegramApiId,
+        telegramApiHash: settings.telegramApiHash,
+        proxyUrl: settings.proxyUrl,
+      },
+      true,
+    )
   }
 
   if (!settings) return <p className="muted">加载设置…</p>
@@ -99,7 +119,12 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                           className="btn btn-ghost"
                           onClick={() =>
                             void api.pickDownloadRoot().then((root) => {
-                              if (root) void api.getSettings().then(setSettings)
+                              if (root) {
+                              void api.getSettings().then((next) => {
+                                setSettings(next)
+                                persistedRef.current = next
+                              })
+                            }
                             })
                           }
                         >
@@ -206,6 +231,7 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                         onClick={() => {
                           void api.setSettings({ onboardingDone: false }).then((next) => {
                             setSettings(next)
+                            persistedRef.current = next
                             window.dispatchEvent(new CustomEvent('wallpaper-runner:replay-onboarding'))
                           })
                         }}
@@ -296,11 +322,23 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                           <button
                             type="button"
                             className="btn btn-ghost"
+                            disabled={tgBusy}
                             onClick={() =>
-                              void api.telegramConnect().then((s) => {
-                                setTgStatus(s)
-                                toast.info(s.state === 'authorized' ? '已连接 Telegram' : `状态：${s.state}`)
-                              })
+                              void (async () => {
+                                setTgBusy(true)
+                                try {
+                                  await persistTelegramCreds()
+                                  const s = await api.telegramConnect()
+                                  setTgStatus(s)
+                                  if (s.state === 'authorized') toast.success('已连接 Telegram')
+                                  else if (s.state === 'error') toast.error(s.error || '连接失败')
+                                  else toast.info(`状态：${s.state}`)
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : String(err))
+                                } finally {
+                                  setTgBusy(false)
+                                }
+                              })()
                             }
                           >
                             连接 session
@@ -308,19 +346,24 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                           <button
                             type="button"
                             className="btn btn-primary"
+                            disabled={tgBusy}
                             onClick={() =>
                               void (async () => {
-                                await save({
-                                  telegramApiId: settings.telegramApiId,
-                                  telegramApiHash: settings.telegramApiHash,
-                                })
-                                const s = await api.telegramStartLogin(phone)
-                                setTgStatus(s)
-                                if (s.state === 'authorized') toast.success('登录成功')
-                                else if (s.state === 'need_code') toast.info('请填写验证码后提交')
-                                else if (s.state === 'need_password') toast.info('请填写两步验证密码')
-                                else if (s.state === 'error') toast.error(s.error || '登录失败')
-                                else toast.info(`状态：${s.state}`)
+                                setTgBusy(true)
+                                try {
+                                  await persistTelegramCreds()
+                                  const s = await api.telegramStartLogin(phone)
+                                  setTgStatus(s)
+                                  if (s.state === 'authorized') toast.success('登录成功')
+                                  else if (s.state === 'need_code') toast.info('请填写验证码后提交')
+                                  else if (s.state === 'need_password') toast.info('请填写两步验证密码')
+                                  else if (s.state === 'error') toast.error(s.error || '登录失败')
+                                  else toast.info(`状态：${s.state}`)
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : String(err))
+                                } finally {
+                                  setTgBusy(false)
+                                }
                               })()
                             }
                           >
@@ -453,7 +496,12 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                           className="btn btn-ghost"
                           onClick={() =>
                             void api.pickWallpaperDir().then((dir) => {
-                              if (dir) void api.getSettings().then(setSettings)
+                              if (dir) {
+                                void api.getSettings().then((next) => {
+                                  setSettings(next)
+                                  persistedRef.current = next
+                                })
+                              }
                             })
                           }
                         >

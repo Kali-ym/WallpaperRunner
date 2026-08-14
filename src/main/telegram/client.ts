@@ -222,7 +222,7 @@ export class TelegramService {
     })()
 
     // Wait until code is requested, authorized, or failed (up to ~20s)
-    const deadline = Date.now() + 20_000
+    const deadline = Date.now() + 45_000
     while (Date.now() < deadline) {
       const s = this.getStatus()
       if (
@@ -234,6 +234,13 @@ export class TelegramService {
         break
       }
       await new Promise((r) => setTimeout(r, 200))
+    }
+    if (this.getStatus().state === 'connecting') {
+      this.setStatus({
+        state: 'error',
+        phone: phoneNormalized,
+        error: '连接 Telegram 超时，请检查代理或网络后重试',
+      })
     }
     return this.getStatus()
   }

@@ -3,6 +3,7 @@ import { Api } from 'telegram'
 import type { ResourceItem, ResourceManifest } from '../../resources/types'
 import type { MediaHandle, TelegramCachedMediaHandle } from '../../resources/handles'
 import { extractTelegraphSlug, normalizeTelegraphUrl } from './urls'
+import { collectTelegraphPageMedia } from './pageMedia'
 
 let seq = 0
 function nextManifestId(): string {
@@ -36,25 +37,25 @@ export async function discoverTelegraphViaTelegram(
   const handles = new Map<string, MediaHandle>()
   const items: ResourceItem[] = []
 
-  const photos = (page.photos ?? []).filter((p): p is Api.Photo => p instanceof Api.Photo)
-  for (let i = 0; i < photos.length; i++) {
-    const id = `telegraph:tgcache:${slug}:photo:${i}`
-    items.push({
-      id,
-      origin: 'telegraph',
-      kind: 'telegraph_image',
-      label: `Telegraph · 图片 ${i + 1}（Telegram 缓存）`,
-    })
-    const handle: TelegramCachedMediaHandle = { kind: 'telegram_media', media: photos[i] }
-    handles.set(id, handle)
-  }
+  const media = collectTelegraphPageMedia(page, wp.photo)
+  for (let i = 0; i < media.length; i++) {
+    const entry = media[i]
+    const id = `telegraph:tgcache:${slug}:${entry.kind}:${i}`
+    if (entry.kind === 'photo') {
+      items.push({
+        id,
+        origin: 'telegraph',
+        kind: 'telegraph_image',
+        label: `Telegraph · 图片 ${i + 1}`,
+      })
+      const handle: TelegramCachedMediaHandle = { kind: 'telegram_media', media: entry.media }
+      handles.set(id, handle)
+      continue
+    }
 
-  const docs = (page.documents ?? []).filter((d): d is Api.Document => d instanceof Api.Document)
-  for (let i = 0; i < docs.length; i++) {
-    const doc = docs[i]
+    const doc = entry.media
     const mime = doc.mimeType ?? ''
     const isImage = mime.startsWith('image/')
-    const id = `telegraph:tgcache:${slug}:doc:${i}`
     let fileName: string | undefined
     for (const attr of doc.attributes ?? []) {
       if (attr instanceof Api.DocumentAttributeFilename) fileName = attr.fileName
@@ -63,7 +64,7 @@ export async function discoverTelegraphViaTelegram(
       id,
       origin: 'telegraph',
       kind: isImage ? 'telegraph_image' : 'telegraph_file',
-      label: `Telegraph · ${isImage ? '图片' : '文件'} ${photos.length + i + 1}（Telegram 缓存）`,
+      label: `Telegraph · ${isImage ? '图片' : '文件'} ${i + 1}`,
       fileName,
       mimeType: mime,
       size: typeof doc.size === 'number' ? doc.size : Number(doc.size),
