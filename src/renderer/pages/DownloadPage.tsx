@@ -55,11 +55,12 @@ const ACTIVE_SORT: Partial<Record<QueueTask['status'], number>> = {
 }
 
 function sortActiveTasks(tasks: QueueTask[]): QueueTask[] {
+  const index = new Map(tasks.map((t, i) => [t.id, i]))
   return [...tasks].sort((a, b) => {
     const rankA = ACTIVE_SORT[a.status] ?? 9
     const rankB = ACTIVE_SORT[b.status] ?? 9
     if (rankA !== rankB) return rankA - rankB
-    return a.createdAt.localeCompare(b.createdAt)
+    return (index.get(a.id) ?? 0) - (index.get(b.id) ?? 0)
   })
 }
 
@@ -95,13 +96,12 @@ function renderTaskList(tasks: QueueTask[], handlers: QueueTaskHandlers): JSX.El
   )
 }
 
-export default function DownloadPage(): JSX.Element {
+export default function DownloadPage({ tasks }: { tasks: QueueTask[] }): JSX.Element {
   const toast = useToast()
   const [segment, setSegment] = useState<'enqueue' | 'queue'>('enqueue')
   const [queueTab, setQueueTab] = useState<'active' | 'done'>('active')
   const [source, setSource] = useState<DownloadSource>('xchina')
   const [text, setText] = useState('')
-  const [tasks, setTasks] = useState<QueueTask[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
@@ -138,14 +138,11 @@ export default function DownloadPage(): JSX.Element {
   }
 
   useEffect(() => {
-    void api.listTasks().then(setTasks)
-    const offQueue = api.onQueueUpdate(setTasks)
     const offExtract = api.onAskExtract((payload) => {
       setExtractError('')
       setAskExtract(payload)
     })
     return () => {
-      offQueue()
       offExtract()
     }
   }, [])
@@ -164,7 +161,7 @@ export default function DownloadPage(): JSX.Element {
     try {
       if (source === 'xchina') {
         if (urls.length > 1) {
-          setError('xChina 不支持合并：将按多条分别入队')
+          toast.info('xChina 不支持合并，已按多条分别入队')
         }
         await api.enqueueUrls(source, urls)
         setText('')
@@ -359,7 +356,7 @@ export default function DownloadPage(): JSX.Element {
                       onChange={(e) => setText(e.target.value)}
                     />
                     <div className="url-composer-meta">
-                      <span>⌘/Ctrl + V</span>
+                      <span>Ctrl / ⌘ + V</span>
                     </div>
                   </div>
 

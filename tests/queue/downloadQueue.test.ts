@@ -216,6 +216,25 @@ describe('DownloadQueue', () => {
     expect(queue.listTasks().find((t) => t.id === a!.id)?.status).toBe('queued')
   })
 
+  it('moveTask skips downloading neighbors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'q-move-'))
+    dirs.push(root)
+    const store = new LibraryStore(root)
+    const queue = new DownloadQueue({ store, imageConcurrency: 1 })
+    queue.pause()
+
+    const [a, b, c] = queue.enqueue([
+      'https://a.example/1',
+      'https://b.example/2',
+      'https://c.example/3',
+    ])
+    const mid = (queue as unknown as { tasks: QueueTask[] }).tasks.find((t) => t.id === b!.id)
+    if (mid) mid.status = 'downloading'
+
+    queue.moveTask(c!.id, 'up')
+    expect(queue.listTasks().map((t) => t.id)).toEqual([c!.id, b!.id, a!.id])
+  })
+
   it('batch pause/resume, remove terminal tasks, and clear groups', async () => {
     const root = await mkdtemp(join(tmpdir(), 'q-batch-'))
     dirs.push(root)

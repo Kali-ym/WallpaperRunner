@@ -35,20 +35,18 @@ export default function CollectionRail({ selection, onSelect, onManagePlaylist }
   const authorsActive = selection.kind === 'authors' || selection.kind === 'author'
 
   function reloadStats(): void {
-    void Promise.all([api.authorStats(), api.listPlaylists(), api.listLibrary('')]).then(
-      ([a, pls, lib]) => {
-        setAuthorCount(a.length)
-        setPlaylists(
-          pls.map((p) => ({
-            id: p.id,
-            name: p.name,
-            count: p.galleryRefs.length,
-          })),
-        )
-        setTotalCount(lib.length)
-        setFavCount(lib.filter((e) => e.favorite).length)
-      },
-    )
+    void Promise.all([api.listPlaylists(), api.libraryCounts()]).then(([pls, counts]) => {
+      setAuthorCount(counts.authors)
+      setPlaylists(
+        pls.map((p) => ({
+          id: p.id,
+          name: p.name,
+          count: p.galleryRefs.length,
+        })),
+      )
+      setTotalCount(counts.total)
+      setFavCount(counts.favorite)
+    })
   }
 
   useEffect(() => {
@@ -278,7 +276,7 @@ export default function CollectionRail({ selection, onSelect, onManagePlaylist }
             if (id === 'open') onSelect({ kind: 'playlist', id: plId, name })
             if (id === 'manage') {
               onSelect({ kind: 'playlist', id: plId, name })
-              window.setTimeout(() => onManagePlaylist?.(plId, name), 0)
+              onManagePlaylist?.(plId, name)
             }
             if (id === 'rename') startRename(plId, name)
             if (id === 'delete') void deletePlaylist(plId, name)

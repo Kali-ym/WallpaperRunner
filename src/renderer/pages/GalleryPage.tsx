@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import ContextMenu from '../components/ContextMenu'
 import ExtractZipModal from '../components/ExtractZipModal'
 import GalleryLightbox from '../components/GalleryLightbox'
@@ -95,6 +95,8 @@ export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.El
   const [extractBusy, setExtractBusy] = useState(false)
   const [extractError, setExtractError] = useState('')
   const [density, setDensity] = useState<ThumbDensity>(readDensity)
+  const onDeletedRef = useRef(onDeleted)
+  onDeletedRef.current = onDeleted
 
   function reload(): void {
     void api.getGallery(entry.source, entry.galleryId).then(setMeta)
@@ -102,6 +104,12 @@ export default function GalleryPage({ entry, onBack, onDeleted }: Props): JSX.El
 
   useEffect(() => {
     reload()
+    return api.onLibraryChange(() => {
+      void api.getGallery(entry.source, entry.galleryId).then((next) => {
+        if (next) setMeta(next)
+        else onDeletedRef.current?.()
+      })
+    })
   }, [entry])
 
   const files = meta?.images ?? []

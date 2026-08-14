@@ -5,13 +5,15 @@ import { galleryFolderName } from './paths'
 import {
   aggregateAuthorStats,
   applyLibraryFilters,
+  libraryCounts,
   mergeTags,
   type LibraryFilters,
   type AuthorStat,
+  type LibraryCounts,
 } from './filters'
 import { fingerprintFile } from './fingerprint'
 
-export type { LibraryFilters, TagStat, AuthorStat } from './filters'
+export type { LibraryFilters, TagStat, AuthorStat, LibraryCounts } from './filters'
 
 export interface GalleryMetadata {
   source: string
@@ -198,6 +200,11 @@ export class LibraryStore extends EventEmitter {
   async search(query: string, opts?: LibraryFilters): Promise<LibraryIndexEntry[]> {
     const entries = await this.loadIndex()
     return applyLibraryFilters(entries, query, opts) as LibraryIndexEntry[]
+  }
+
+  async counts(): Promise<LibraryCounts> {
+    const entries = await this.loadIndex()
+    return libraryCounts(entries)
   }
 
   async listAuthorStats(): Promise<AuthorStat[]> {

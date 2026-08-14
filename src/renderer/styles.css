@@ -1385,14 +1385,20 @@ input:focus-visible {
 .playlist-picker-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   overscroll-behavior: contain;
   margin: 12px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
   background: color-mix(in oklab, var(--bg-deep) 30%, var(--surface));
+}
+.playlist-picker-virtual {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .playlist-picker-empty {
   min-height: 100%;
@@ -1617,6 +1623,8 @@ input:focus-visible {
 
 /* Themed scrollbars — library main pane (authors / galleries / detail thumbs) */
 .library-main.authors-scroll,
+.authors-virtual-scroll,
+.playlist-picker-virtual,
 .gallery-grid-scroll,
 .library-main > .empty,
 .library-main > .skeleton-grid,
@@ -1627,6 +1635,8 @@ input:focus-visible {
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .library-main.authors-scroll::-webkit-scrollbar,
+.authors-virtual-scroll::-webkit-scrollbar,
+.playlist-picker-virtual::-webkit-scrollbar,
 .gallery-grid-scroll::-webkit-scrollbar,
 .library-main > .empty::-webkit-scrollbar,
 .library-main > .skeleton-grid::-webkit-scrollbar,
@@ -1638,6 +1648,8 @@ input:focus-visible {
   display: block !important;
 }
 .library-main.authors-scroll::-webkit-scrollbar-track,
+.authors-virtual-scroll::-webkit-scrollbar-track,
+.playlist-picker-virtual::-webkit-scrollbar-track,
 .gallery-grid-scroll::-webkit-scrollbar-track,
 .library-main > .empty::-webkit-scrollbar-track,
 .library-main > .skeleton-grid::-webkit-scrollbar-track,
@@ -1648,6 +1660,8 @@ input:focus-visible {
   border-radius: 999px;
 }
 .library-main.authors-scroll::-webkit-scrollbar-thumb,
+.authors-virtual-scroll::-webkit-scrollbar-thumb,
+.playlist-picker-virtual::-webkit-scrollbar-thumb,
 .gallery-grid-scroll::-webkit-scrollbar-thumb,
 .library-main > .empty::-webkit-scrollbar-thumb,
 .library-main > .skeleton-grid::-webkit-scrollbar-thumb,
@@ -1660,6 +1674,8 @@ input:focus-visible {
   background-clip: padding-box;
 }
 .library-main.authors-scroll::-webkit-scrollbar-thumb:hover,
+.authors-virtual-scroll::-webkit-scrollbar-thumb:hover,
+.playlist-picker-virtual::-webkit-scrollbar-thumb:hover,
 .gallery-grid-scroll::-webkit-scrollbar-thumb:hover,
 .library-main > .empty::-webkit-scrollbar-thumb:hover,
 .library-main > .skeleton-grid::-webkit-scrollbar-thumb:hover,
@@ -1806,8 +1822,15 @@ input:focus-visible {
   padding: 0;
 }
 .library-main.authors-scroll {
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 10px 22px 100px;
+}
+.authors-virtual-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .authors-grid {
   display: grid;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { api, type LibraryIndexEntry } from '../lib/api'
+import VirtualGalleryGrid from './VirtualGalleryGrid'
 
 type PickerFilter = 'all' | 'out' | 'in'
 
@@ -49,10 +50,14 @@ export default function PlaylistManageModal({
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        onClose()
+      }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, onClose])
 
   const pickerEntries = useMemo(() => {
@@ -233,8 +238,17 @@ export default function PlaylistManageModal({
               <span className="muted">试试切换筛选或修改搜索词</span>
             </div>
           ) : (
-            <div className="playlist-picker-grid">
-              {pickerEntries.map((e) => {
+            <VirtualGalleryGrid
+              items={pickerEntries}
+              className="playlist-picker-virtual"
+              gridClassName="playlist-picker-grid"
+              minColWidth={118}
+              coverAspect={1}
+              metaEst={52}
+              gap={10}
+              threshold={48}
+              getKey={keyOf}
+              renderItem={(e) => {
                 const k = keyOf(e)
                 const checked = pickerSelected.has(k)
                 const inList = memberKeys.has(k)
@@ -244,7 +258,6 @@ export default function PlaylistManageModal({
                   : undefined
                 return (
                   <button
-                    key={k}
                     type="button"
                     className={`playlist-picker-card${checked ? ' checked' : ''}${inList ? ' in-list' : ''}`}
                     aria-pressed={checked}
@@ -279,8 +292,8 @@ export default function PlaylistManageModal({
                     </span>
                   </button>
                 )
-              })}
-            </div>
+              }}
+            />
           )}
         </div>
 

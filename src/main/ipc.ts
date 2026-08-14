@@ -335,6 +335,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:authorStats', async () => store.listAuthorStats())
 
+  ipcMain.handle('library:counts', async () => store.counts())
+
   ipcMain.handle('library:getAuthorAvatar', async (_e, author: string) => {
     return authorAvatarStore.get(author)
   })

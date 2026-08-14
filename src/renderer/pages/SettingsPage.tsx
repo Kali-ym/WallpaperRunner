@@ -20,10 +20,9 @@ function tgBadge(state: TelegramAuthStatus['state'] | undefined): { label: strin
   }
 }
 
-export default function SettingsPage(): JSX.Element {
+export default function SettingsPage({ active = true }: { active?: boolean }): JSX.Element {
   const toast = useToast()
   const [settings, setSettings] = useState<AppSettings | null>(null)
-  const [startupOn, setStartupOn] = useState(false)
   const [tgStatus, setTgStatus] = useState<TelegramAuthStatus | null>(null)
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -31,12 +30,16 @@ export default function SettingsPage(): JSX.Element {
   const [group, setGroup] = useState<'general' | 'network' | 'telegram' | 'wallpaper'>('general')
 
   useEffect(() => {
+    if (!active) return
     void api.getSettings().then(setSettings)
-    void api.wallpaperStartupStatus().then((s) => setStartupOn(s.installed))
     void api.telegramStatus().then(setTgStatus)
-  }, [])
+  }, [active])
 
   async function save(partial: Partial<AppSettings>): Promise<void> {
+    if (settings) {
+      const keys = Object.keys(partial) as (keyof AppSettings)[]
+      if (keys.length > 0 && keys.every((k) => settings[k] === partial[k])) return
+    }
     const next = await api.setSettings(partial)
     setSettings(next)
     if (partial.theme) emitThemeChanged(partial.theme)
@@ -313,31 +316,11 @@ export default function SettingsPage(): JSX.Element {
                                 })
                                 const s = await api.telegramStartLogin(phone)
                                 setTgStatus(s)
-                                for (let i = 0; i < 30; i++) {
-                                  await new Promise((r) => setTimeout(r, 500))
-                                  const cur = await api.telegramStatus()
-                                  setTgStatus(cur)
-                                  if (cur.state === 'need_code') {
-                                    toast.info('请填写验证码后提交')
-                                    break
-                                  }
-                                  if (cur.state === 'need_password') {
-                                    toast.info('请填写两步验证密码')
-                                    break
-                                  }
-                                  if (cur.state === 'authorized') {
-                                    toast.success('登录成功')
-                                    break
-                                  }
-                                  if (cur.state === 'error') {
-                                    toast.error(cur.error || '登录失败')
-                                    break
-                                  }
-                                }
-                                void api.telegramWaitLogin().then((final) => {
-                                  setTgStatus(final)
-                                  if (final.state === 'authorized') toast.success('登录成功')
-                                })
+                                if (s.state === 'authorized') toast.success('登录成功')
+                                else if (s.state === 'need_code') toast.info('请填写验证码后提交')
+                                else if (s.state === 'need_password') toast.info('请填写两步验证密码')
+                                else if (s.state === 'error') toast.error(s.error || '登录失败')
+                                else toast.info(`状态：${s.state}`)
                               })()
                             }
                           >
@@ -377,7 +360,12 @@ export default function SettingsPage(): JSX.Element {
                                   return
                                 }
                                 try {
-                                  await api.telegramSubmitCode(code.trim())
+                                  const s = await api.telegramSubmitCode(code.trim())
+                                  setTgStatus(s)
+                                  if (s.state === 'authorized') {
+                                    toast.success('登录成功')
+                                    return
+                                  }
                                   const final = await api.telegramWaitLogin()
                                   setTgStatus(final)
                                   if (final.state === 'authorized') toast.success('登录成功')
@@ -397,6 +385,10 @@ export default function SettingsPage(): JSX.Element {
                             onClick={() =>
                               void api.telegramSubmitPassword(password).then((s) => {
                                 setTgStatus(s)
+                                if (s.state === 'authorized') {
+                                  toast.success('登录成功')
+                                  return
+                                }
                                 void api.telegramWaitLogin().then((final) => {
                                   setTgStatus(final)
                                   if (final.state === 'authorized') toast.success('登录成功')
@@ -493,6 +485,8 @@ export default function SettingsPage(): JSX.Element {
                                 ? `，并更新了 WE 副本 ${r.mirroredDirs.length} 处`
                                 : '（未找到 WE 导入副本时，请先导入一次 index.html）'
                             toast.success(`已同步 ${r.galleryCount} 套 / ${r.imageCount} 张${extra}`)
+                          }).catch((err: unknown) => {
+                            toast.error(err instanceof Error ? err.message : String(err))
                           })
                         }
                       >
@@ -510,7 +504,6 @@ export default function SettingsPage(): JSX.Element {
                         className="btn btn-ghost"
                         onClick={() =>
                           void api.installWallpaperStartup().then((r) => {
-                            setStartupOn(true)
                             toast.success(`已安装开机自启：${r.path}`)
                           })
                         }
@@ -522,7 +515,6 @@ export default function SettingsPage(): JSX.Element {
                         className="btn btn-ghost"
                         onClick={() =>
                           void api.uninstallWallpaperStartup().then((r) => {
-                            setStartupOn(r.installed)
                             toast.info(r.removed ? '已卸载开机自启' : '未找到开机自启项')
                           })
                         }

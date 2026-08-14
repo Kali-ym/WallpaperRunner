@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { DownloadSource } from '../main/sources/types'
 import type { AppSettings } from '../main/settings'
 import type { GalleryMetadata, LibraryIndexEntry } from '../main/library/store'
-import type { LibraryFilters, TagStat, AuthorStat } from '../main/library/filters'
+import type { LibraryFilters, TagStat, AuthorStat, LibraryCounts } from '../main/library/filters'
 import type { QueueTask } from '../main/queue/types'
 import type { ResourceManifest } from '../main/resources/types'
 import type { TelegramAuthStatus } from '../main/telegram/client'
@@ -26,7 +26,7 @@ export type AuthorImageSource = {
   cover: string | null
   images: string[]
 }
-export type { ResourceManifest, TelegramAuthStatus, DownloadSource, LibraryFilters, TagStat, AuthorStat }
+export type { ResourceManifest, TelegramAuthStatus, DownloadSource, LibraryFilters, TagStat, AuthorStat, LibraryCounts }
 
 const api = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
@@ -38,6 +38,7 @@ const api = {
     query?: string,
     filters?: LibraryFilters,
   ): Promise<LibraryIndexEntry[]> => ipcRenderer.invoke('library:list', query, filters),
+  libraryCounts: (): Promise<LibraryCounts> => ipcRenderer.invoke('library:counts'),
   authorStats: (): Promise<AuthorStat[]> => ipcRenderer.invoke('library:authorStats'),
   getAuthorAvatar: (author: string): Promise<AuthorAvatarRecord | null> =>
     ipcRenderer.invoke('library:getAuthorAvatar', author),

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   applyLibraryFilters,
   aggregateAuthorStats,
+  libraryCounts,
   mergeTags,
   normalizeImageRange,
   type FilterableEntry,
@@ -53,6 +54,28 @@ describe('library filters helpers', () => {
 
   it('aggregates author stats and mergeTags dedupes case-insensitively', () => {
     expect(mergeTags(['JK'], ['jk', '街拍'])).toEqual(['JK', '街拍'])
+  })
+
+  it('filters by galleryKeys', () => {
+    const entries = [
+      base({ title: '1', galleryId: 'a' }),
+      base({ title: '2', galleryId: 'b' }),
+      base({ title: '3', galleryId: 'c' }),
+    ]
+    const hit = applyLibraryFilters(entries, '', { galleryKeys: ['xchina:a', 'xchina:c'] })
+    expect(hit.map((e) => e.title)).toEqual(['1', '3'])
+    expect(applyLibraryFilters(entries, '', { galleryKeys: [] })).toEqual([])
+  })
+
+  it('counts total favorites and authors', () => {
+    expect(
+      libraryCounts([
+        base({ favorite: true, author: 'Alice' }),
+        base({ favorite: false, author: 'alice' }),
+        base({ favorite: true, author: 'Bob' }),
+        base({ favorite: false, author: '' }),
+      ]),
+    ).toEqual({ total: 4, favorite: 2, authors: 3 })
   })
 
   it('filters by authors and aggregates author stats', () => {
@@ -110,6 +133,9 @@ describe('LibraryStore', () => {
     expect(renamed?.favorite).toBe(true)
     const favOnly = await store.search('', { favoriteOnly: true })
     expect(favOnly).toHaveLength(1)
+    expect(await store.counts()).toEqual({ total: 1, favorite: 1, authors: 1 })
+    expect(await store.search('', { galleryKeys: ['xchina:abc'] })).toHaveLength(1)
+    expect(await store.search('', { galleryKeys: [] })).toEqual([])
 
     const rebuilt = await store.rebuildIndex()
     expect(rebuilt).toHaveLength(1)

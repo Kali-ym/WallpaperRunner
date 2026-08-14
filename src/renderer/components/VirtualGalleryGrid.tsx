@@ -16,6 +16,13 @@ type Props<T> = {
   renderItem: (item: T, index: number, focused: boolean) => ReactNode
   onOpenIndex?: (index: number) => void
   className?: string
+  gridClassName?: string
+  /** Override min column width (px). */
+  minColWidth?: number
+  /** Cover height / width. Default 10/16 for gallery cards. */
+  coverAspect?: number
+  metaEst?: number
+  gap?: number
   /** Activate windowing above this count. */
   threshold?: number
 }
@@ -35,10 +42,9 @@ const GRID_GAP = 18
 const CARD_GAP = 10
 const OVERSCAN = 4
 
-function estimateRowHeight(colWidth: number, density: string): number {
-  const coverH = colWidth * (10 / 16)
-  const meta = META_EST[density] ?? 54
-  return Math.ceil(coverH + CARD_GAP + meta + GRID_GAP)
+function estimateRowHeight(colWidth: number, coverAspect: number, metaEst: number, gap: number): number {
+  const coverH = colWidth * coverAspect
+  return Math.ceil(coverH + CARD_GAP + metaEst + gap)
 }
 
 export default function VirtualGalleryGrid<T>({
@@ -48,6 +54,11 @@ export default function VirtualGalleryGrid<T>({
   renderItem,
   onOpenIndex,
   className,
+  gridClassName = 'gallery-grid',
+  minColWidth,
+  coverAspect = 10 / 16,
+  metaEst,
+  gap = GRID_GAP,
   threshold = 80,
 }: Props<T>): JSX.Element {
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -61,7 +72,8 @@ export default function VirtualGalleryGrid<T>({
   const [focusIdx, setFocusIdx] = useState(0)
   const [windowRange, setWindowRange] = useState({ startRow: 0, endRow: 12 })
 
-  const estRowH = estimateRowHeight(colWidth, density)
+  const meta = metaEst ?? META_EST[density] ?? 54
+  const estRowH = estimateRowHeight(colWidth, coverAspect, meta, gap)
   const rowH = measuredRowH > 0 ? measuredRowH : estRowH
   const rowCount = Math.ceil(items.length / cols) || 0
   const useVirtual = items.length >= threshold
@@ -73,13 +85,13 @@ export default function VirtualGalleryGrid<T>({
     const padX =
       (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
     const w = Math.max(0, el.clientWidth - padX)
-    const min = MIN_COL[density] ?? 180
-    const nextCols = Math.max(1, Math.floor((w + GRID_GAP) / (min + GRID_GAP)))
-    const nextColW = (w - GRID_GAP * (nextCols - 1)) / nextCols
+    const min = minColWidth ?? MIN_COL[density] ?? 180
+    const nextCols = Math.max(1, Math.floor((w + gap) / (min + gap)))
+    const nextColW = (w - gap * (nextCols - 1)) / nextCols
     setCols(nextCols)
     setColWidth(Math.max(1, nextColW))
     setViewportH(el.clientHeight)
-  }, [density])
+  }, [density, minColWidth, gap])
 
   const syncWindow = useCallback(
     (scrollTop: number) => {
@@ -117,7 +129,7 @@ export default function VirtualGalleryGrid<T>({
   const startIdx = startRow * cols
   const endIdx = Math.min(items.length, endRow * cols)
   const slice = useVirtual ? items.slice(startIdx, endIdx) : items
-  const totalH = useVirtual ? Math.max(0, rowCount * rowH - GRID_GAP) : undefined
+  const totalH = useVirtual ? Math.max(0, rowCount * rowH - gap) : undefined
   const offsetY = useVirtual ? startRow * rowH : 0
 
   useLayoutEffect(() => {
@@ -127,9 +139,9 @@ export default function VirtualGalleryGrid<T>({
     if (!cell) return
     const h = cell.getBoundingClientRect().height
     if (h <= 0) return
-    const next = Math.ceil(h + GRID_GAP)
+    const next = Math.ceil(h + gap)
     setMeasuredRowH((prev) => (Math.abs(prev - next) > 1 ? next : prev))
-  }, [cols, density, colWidth, startIdx, slice.length])
+  }, [cols, density, colWidth, startIdx, slice.length, gap])
 
   useEffect(() => {
     syncWindow(scrollTopRef.current)
@@ -213,11 +225,11 @@ export default function VirtualGalleryGrid<T>({
           }
         >
           <div
-            className="gallery-grid"
+            className={gridClassName}
             data-density={density}
             style={{
               gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-              gap: GRID_GAP,
+              gap,
             }}
           >
             {slice.map((item, i) => {

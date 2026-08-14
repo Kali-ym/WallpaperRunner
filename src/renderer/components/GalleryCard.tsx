@@ -1,4 +1,4 @@
-import { memo, useState, type JSX } from 'react'
+import { memo, type JSX } from 'react'
 import type { LibraryIndexEntry } from '../lib/api'
 import { api } from '../lib/api'
 
@@ -23,18 +23,9 @@ function GalleryCard({
   onToggleSelect,
   onToggleFavorite,
 }: Props): JSX.Element {
-  const [hover, setHover] = useState(false)
-  const [previewReady, setPreviewReady] = useState(false)
-
   const cover = entry.cover
     ? api.getMediaUrl(entry.dirName, entry.cover, {
         thumb: true,
-        bust: entry.downloadedAt,
-      })
-    : undefined
-
-  const preview = entry.cover
-    ? api.getMediaUrl(entry.dirName, entry.cover, {
         bust: entry.downloadedAt,
       })
     : undefined
@@ -47,11 +38,6 @@ function GalleryCard({
   return (
     <article
       className={`card${selected ? ' selected' : ''}${selectMode ? ' select-mode' : ''}`}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => {
-        setHover(false)
-        setPreviewReady(false)
-      }}
     >
       {selectMode ? (
         <span className={`card-check${selected ? ' is-checked' : ''}`} aria-hidden>
@@ -75,15 +61,6 @@ function GalleryCard({
           ) : (
             <div className="art cover-empty">无封面</div>
           )}
-          {hover && preview && !selectMode ? (
-            <img
-              className={`art gallery-card-preview${previewReady ? ' is-ready' : ''}`}
-              src={preview}
-              alt=""
-              decoding="async"
-              onLoad={() => setPreviewReady(true)}
-            />
-          ) : null}
           {!selectMode ? (
             <span className="cover-author" title={entry.author || '未知作者'}>
               {entry.author || '未知作者'}

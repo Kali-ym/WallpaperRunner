@@ -226,10 +226,18 @@ export class DownloadQueue extends EventEmitter {
     if (idx < 0) return
     const task = this.tasks[idx]
     if (!task || (task.status !== 'queued' && task.status !== 'paused')) return
-    const swapWith = direction === 'up' ? idx - 1 : idx + 1
-    if (swapWith < 0 || swapWith >= this.tasks.length) return
+    const step = direction === 'up' ? -1 : 1
+    let swapWith = -1
+    for (let i = idx + step; i >= 0 && i < this.tasks.length; i += step) {
+      const other = this.tasks[i]
+      if (other && (other.status === 'queued' || other.status === 'paused')) {
+        swapWith = i
+        break
+      }
+    }
+    if (swapWith < 0) return
     const other = this.tasks[swapWith]
-    if (!other || (other.status !== 'queued' && other.status !== 'paused')) return
+    if (!other) return
     this.tasks[idx] = other
     this.tasks[swapWith] = task
     this.emitUpdate()

@@ -13,12 +13,9 @@ import CollectionRail, { type BrowseSelection } from './components/CollectionRai
 import { ToastProvider, useToast } from './lib/toast'
 import { ConfirmProvider } from './lib/confirm'
 import { api, type AppSettings, type LibraryIndexEntry, type QueueTask } from './lib/api'
-import {
-  applyTheme,
-  THEME_CHANGED_EVENT,
-  watchSystemTheme,
-  type ThemePreference,
-} from './lib/theme'
+import { applyTheme, THEME_CHANGED_EVENT, watchSystemTheme, type ThemePreference } from './lib/theme'
+import { overlayOpen } from './lib/overlays'
+import { modKeyLabel } from './lib/hotkeys'
 
 type AppMode = 'browse' | 'acquire' | 'settings'
 
@@ -173,6 +170,7 @@ function AppShell(): JSX.Element {
           setHelpOpen(false)
           return
         }
+        if (overlayOpen()) return
         if (activeRef.current) {
           setActive(null)
           return
@@ -237,7 +235,7 @@ function AppShell(): JSX.Element {
                 value={headerQuery}
                 onChange={(e) => setHeaderQuery(e.target.value)}
               />
-              <kbd>⌘K</kbd>
+              <kbd>{modKeyLabel()}+K</kbd>
             </label>
           ) : (
             <div className="header-spacer" />
@@ -298,9 +296,9 @@ function AppShell(): JSX.Element {
           <CollectionRail
             selection={browseSelection}
             onSelect={setBrowseSelection}
-            onManagePlaylist={(id) => {
+            onManagePlaylist={(id, name) => {
               window.dispatchEvent(
-                new CustomEvent('wallpaper-runner:manage-playlist', { detail: { id } }),
+                new CustomEvent('wallpaper-runner:manage-playlist', { detail: { id, name } }),
               )
             }}
           />
@@ -336,7 +334,7 @@ function AppShell(): JSX.Element {
             aria-label="获取"
             style={{ display: active || mode !== 'acquire' ? 'none' : undefined }}
           >
-            <DownloadPage />
+            <DownloadPage tasks={tasks} />
           </section>
           <section
             className={active || mode !== 'settings' ? 'view' : 'view active'}
@@ -344,7 +342,7 @@ function AppShell(): JSX.Element {
             aria-label="设置"
             style={{ display: active || mode !== 'settings' ? 'none' : undefined }}
           >
-            <SettingsPage />
+            <SettingsPage active={mode === 'settings' && !active} />
           </section>
 
           <DownloadDock tasks={tasks} />

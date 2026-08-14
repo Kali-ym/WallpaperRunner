@@ -80,6 +80,16 @@ export function buildProjectJson(playlists: { id: string; name: string }[]): str
           max: 4,
           fraction: false,
         },
+        cutduration: {
+          order: 7,
+          text: 'Cut duration (seconds)',
+          type: 'slider',
+          value: '1',
+          min: 0.3,
+          max: 2,
+          fraction: true,
+          precision: 1,
+        },
       },
       supportsaudioprocessing: false,
     },
@@ -111,16 +121,31 @@ export const INDEX_HTML = `<!DOCTYPE html>
     #stage {
       position: fixed;
       inset: 0;
+      overflow: hidden;
       background: #0a0a0a;
+      --cut-ms: 1000ms;
+      --cut-ease: cubic-bezier(0.32, 0.72, 0, 1);
     }
     #stage .layer {
       position: absolute;
       inset: 0;
       opacity: 0;
-      transition: opacity 0.35s ease;
+      transform: scale(1.08);
+      transform-origin: center center;
+      transition-property: opacity, transform;
+      transition-duration: var(--cut-ms);
+      transition-timing-function: var(--cut-ease);
     }
     #stage .layer.visible {
       opacity: 1;
+      transform: scale(1);
+    }
+    #stage .layer.exit {
+      opacity: 0;
+      transform: scale(1.055);
+    }
+    #stage .layer.animating {
+      will-change: transform, opacity;
     }
     #stage .bg-blur {
       position: absolute;
@@ -204,6 +229,8 @@ export const MAIN_JS = String.raw`(() => {
     pool: 'all',
     intervalMin: 3,
     intervalMax: 5,
+    cutMs: 1000,
+    fps: 0,
     landscapeMode: 'smart',
     portraitMode: 'multi',
     portraitColumns: 0,
@@ -212,6 +239,9 @@ export const MAIN_JS = String.raw`(() => {
     playlistLoadedAt: 0,
     forcePlaylist: false,
     lastGalleryId: null,
+    /** poolKey -> gallery ids already shown this cycle. Memory is source of truth. */
+    seenByPool: {},
+    seenHydrated: false,
     cursor: 0,
     gallery: null,
     timer: null,
@@ -386,34 +416,94 @@ export const MAIN_JS = String.raw`(() => {
     return (pl && pl.name) || pool;
   }
 
+  function mergeIds(a, b) {
+    const out = [];
+    const have = {};
+    const arr = (a || []).concat(b || []);
+    for (let i = 0; i < arr.length; i++) {
+      const id = arr[i];
+      if (typeof id !== 'string' || !id || have[id]) continue;
+      have[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
   function seenStorageKey(pool) {
     return 'gallerySeen:' + String(pool || 'all');
   }
 
-  function loadSeen(pool) {
+  function loadSeenLocal(pool) {
     try {
       const raw = localStorage.getItem(seenStorageKey(pool));
       const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+      return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string' && x) : [];
     } catch (e) {
       return [];
     }
   }
 
-  function saveSeen(pool, ids) {
+  function saveSeenLocal(pool, ids) {
     try {
       localStorage.setItem(seenStorageKey(pool), JSON.stringify(ids));
     } catch (e) {
-      /* ignore quota */
+      /* ignore quota / file:// */
     }
+  }
+
+  function poolSeen(poolKey) {
+    if (!state.seenByPool[poolKey]) state.seenByPool[poolKey] = [];
+    return state.seenByPool[poolKey];
+  }
+
+  async function hydrateSeen() {
+    if (state.seenHydrated) return;
+    const base = state.mediaBase.replace(/\/$/, '');
+    try {
+      const res = await fetch(base + '/seen.json?_=' + Date.now(), { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const keys = Object.keys(data);
+          for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            if (Array.isArray(data[k])) state.seenByPool[k] = mergeIds(state.seenByPool[k], data[k]);
+          }
+          state.seenHydrated = true;
+        }
+      }
+    } catch (e) {
+      /* media server down — in-memory + localStorage still work this session */
+    }
+    const extra = ['all', 'favorites', String(state.pool || 'all')];
+    for (let i = 0; i < extra.length; i++) {
+      const k = extra[i];
+      state.seenByPool[k] = mergeIds(state.seenByPool[k], loadSeenLocal(k));
+    }
+    state.seenHydrated = true;
+  }
+
+  async function persistSeen(reset) {
+    const poolKey = String(state.pool || 'all');
+    const ids = poolSeen(poolKey);
+    saveSeenLocal(poolKey, ids);
+    const base = state.mediaBase.replace(/\/$/, '');
+    try {
+      await fetch(base + '/seen.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pool: poolKey, ids: ids, reset: !!reset }),
+      });
+    } catch (e) {}
   }
 
   function markGallerySeen(pool, id) {
     if (!id) return;
-    const seen = loadSeen(pool);
+    const key = String(pool || 'all');
+    const seen = poolSeen(key);
     if (seen.indexOf(id) >= 0) return;
     seen.push(id);
-    saveSeen(pool, seen);
+    void persistSeen(false);
   }
 
   function pickGallery(pool) {
@@ -421,11 +511,13 @@ export const MAIN_JS = String.raw`(() => {
     const poolKey = String(state.pool || 'all');
     const alive = {};
     for (let i = 0; i < pool.length; i++) alive[pool[i].id] = true;
-    let seen = loadSeen(poolKey).filter((id) => alive[id]);
+    let seen = poolSeen(poolKey).filter((id) => alive[id]);
+    state.seenByPool[poolKey] = seen;
     let unseen = pool.filter((g) => seen.indexOf(g.id) < 0);
     if (!unseen.length) {
       seen = [];
-      saveSeen(poolKey, seen);
+      state.seenByPool[poolKey] = seen;
+      void persistSeen(true);
       unseen = pool.slice();
     }
     if (unseen.length === 1) return unseen[0];
@@ -445,18 +537,46 @@ export const MAIN_JS = String.raw`(() => {
     }
   }
 
+  function applyCutVars() {
+    const ms = Math.max(300, Math.min(2000, Number(state.cutMs) || 1000));
+    state.cutMs = ms;
+    if (stage) stage.style.setProperty('--cut-ms', ms + 'ms');
+  }
+
   function showLayer(nodes) {
+    applyCutVars();
     const layer = document.createElement('div');
-    layer.className = 'layer';
+    layer.className = 'layer animating';
     for (const n of nodes) layer.appendChild(n);
     stage.appendChild(layer);
-    requestAnimationFrame(() => layer.classList.add('visible'));
-    if (state.front) {
-      const prev = state.front;
-      prev.classList.remove('visible');
-      setTimeout(() => prev.remove(), 400);
-    }
+
+    const prev = state.front;
     state.front = layer;
+
+    const kids = Array.prototype.slice.call(stage.children);
+    for (let i = 0; i < kids.length; i++) {
+      const el = kids[i];
+      if (el !== layer && el !== prev) el.remove();
+    }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        layer.classList.add('visible');
+      });
+    });
+
+    const ttl = (state.cutMs || 1000) + 80;
+    if (prev) {
+      prev.classList.remove('visible');
+      prev.classList.add('exit');
+      prev.classList.add('animating');
+      setTimeout(function () {
+        if (prev.parentNode) prev.remove();
+      }, ttl);
+    }
+    setTimeout(function () {
+      if (layer.parentNode) layer.classList.remove('animating');
+    }, ttl);
   }
 
   function makeBlurBg(url) {
@@ -639,6 +759,7 @@ export const MAIN_JS = String.raw`(() => {
     state.running = true;
     setStatus('加载播放列表…');
     await loadPlaylist(true);
+    await hydrateSeen();
 
     while (state.running) {
       const token = state.skipToken;
@@ -653,6 +774,8 @@ export const MAIN_JS = String.raw`(() => {
           await loadPlaylist(true);
         }
       }
+
+      if (!state.seenHydrated) await hydrateSeen();
 
       const pool = getPoolGalleries();
       if (!pool.length) {
@@ -691,15 +814,20 @@ export const MAIN_JS = String.raw`(() => {
         const ok = await showFrameFromGallery();
         if (!ok) break;
         shown += 1;
-        if (shown === 1) setStatus('');
-        const waitMs = randBetween(state.intervalMin, state.intervalMax) * 1000;
+        if (shown === 1) {
+          setStatus('');
+          markGallerySeen(String(state.pool || 'all'), g.id);
+        }
+        const waitMs = Math.max(
+          state.cutMs || 1000,
+          randBetween(state.intervalMin, state.intervalMax) * 1000,
+        );
         const stillSame = await sleep(waitMs);
         if (!stillSame || token !== state.skipToken) {
           aborted = true;
           break;
         }
         await loadPlaylist(false);
-        // If pool membership changed mid-gallery, bail without marking seen
         const stillInPool = getPoolGalleries().some((x) => x.id === g.id);
         if (!stillInPool) {
           aborted = true;
@@ -708,9 +836,6 @@ export const MAIN_JS = String.raw`(() => {
         }
       }
 
-      if (!aborted && token === state.skipToken) {
-        markGallerySeen(String(state.pool || 'all'), g.id);
-      }
       if (!aborted && !shown) {
         setStatus('图片加载失败（检查 library 联接）：' + (g.title || g.id));
         await sleep(2000);
@@ -730,6 +855,7 @@ export const MAIN_JS = String.raw`(() => {
     const next = resolvePoolValue(raw);
     if (next === state.pool) return;
     state.pool = next;
+    state.seenByPool[next] = mergeIds(state.seenByPool[next], loadSeenLocal(next));
     state.forcePlaylist = true;
     skipCurrentGallery();
     setStatus('切换播放池：' + poolLabel(next));
@@ -755,7 +881,16 @@ export const MAIN_JS = String.raw`(() => {
       if (properties.portraitcolumns && properties.portraitcolumns.value !== undefined) {
         state.portraitColumns = Math.max(0, Math.min(4, Math.floor(Number(properties.portraitcolumns.value) || 0)));
       }
+      if (properties.cutduration && properties.cutduration.value !== undefined) {
+        state.cutMs = Math.round(Math.max(0.3, Number(properties.cutduration.value) || 1) * 1000);
+        applyCutVars();
+      }
       clampInterval();
+    },
+    applyGeneralProperties: function (properties) {
+      if (properties.fps) {
+        state.fps = Number(properties.fps) || 0;
+      }
     },
   };
 
@@ -764,6 +899,7 @@ export const MAIN_JS = String.raw`(() => {
   });
 
   function start() {
+    applyCutVars();
     void runLoop();
   }
   if (document.readyState === 'loading') {

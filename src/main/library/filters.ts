@@ -7,7 +7,11 @@ export type LibraryFilters = {
   downloadedTo?: string
   minImages?: number
   maxImages?: number
+  /** `source:galleryId` keys; used to scope a playlist without shipping the full library. */
+  galleryKeys?: string[]
 }
+
+export type LibraryCounts = { total: number; favorite: number; authors: number }
 
 export type TagStat = { tag: string; count: number }
 export type AuthorStat = { author: string; count: number }
@@ -41,6 +45,7 @@ export function normalizeImageRange(
 
 export type FilterableEntry = {
   source: string
+  galleryId?: string
   author: string
   title: string
   displayTitle?: string
@@ -65,6 +70,11 @@ export function applyLibraryFilters(
 
   if (opts?.favoriteOnly) {
     list = list.filter((e) => e.favorite)
+  }
+
+  if (opts?.galleryKeys) {
+    const allow = new Set(opts.galleryKeys)
+    list = list.filter((e) => e.galleryId != null && allow.has(`${e.source}:${e.galleryId}`))
   }
 
   if (opts?.sources && opts.sources.length > 0) {
@@ -124,6 +134,14 @@ export function aggregateAuthorStats(entries: FilterableEntry[]): AuthorStat[] {
     if (b.count !== a.count) return b.count - a.count
     return a.author.localeCompare(b.author, 'zh-CN')
   })
+}
+
+export function libraryCounts(entries: FilterableEntry[]): LibraryCounts {
+  return {
+    total: entries.length,
+    favorite: entries.filter((e) => e.favorite).length,
+    authors: aggregateAuthorStats(entries).length,
+  }
 }
 
 /** Merge new tags into existing; case-insensitive dedupe, keep first spelling. */

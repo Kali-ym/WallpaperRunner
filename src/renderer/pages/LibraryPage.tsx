@@ -224,26 +224,24 @@ export default function LibraryPage({
         effective.authors = [opts?.author ?? browseSelection.author]
       }
 
-      void Promise.all([
-        api.listLibrary(query, effective),
-        browseSelection.kind === 'playlist' ? api.listPlaylists() : Promise.resolve(null),
-      ])
-        .then(([list, pls]) => {
-          if (seq !== reloadSeq.current) return
-          let next = list
-          if (browseSelection.kind === 'playlist' && pls) {
+      void (async () => {
+        try {
+          if (browseSelection.kind === 'playlist') {
+            const pls = await api.listPlaylists()
+            if (seq !== reloadSeq.current) return
             const pl = pls.find((p) => p.id === browseSelection.id)
-            const keys = new Set((pl?.galleryRefs ?? []).map((r) => `${r.source}:${r.galleryId}`))
-            next = list.filter((e) => keys.has(keyOf(e)))
+            effective.galleryKeys = (pl?.galleryRefs ?? []).map((r) => `${r.source}:${r.galleryId}`)
           }
-          setItems(next)
+          const list = await api.listLibrary(query, effective)
+          if (seq !== reloadSeq.current) return
+          setItems(list)
           setLoading(false)
-        })
-        .catch((err: unknown) => {
+        } catch (err: unknown) {
           if (seq !== reloadSeq.current) return
           setLoading(false)
           toast.error(err instanceof Error ? err.message : String(err))
-        })
+        }
+      })()
     },
     [query, toast, browseSelection],
   )
@@ -259,14 +257,26 @@ export default function LibraryPage({
 
   useEffect(() => {
     function onManagePlaylist(e: Event): void {
-      const id = (e as CustomEvent<{ id: string }>).detail?.id
-      if (browseSelection.kind === 'playlist' && browseSelection.id === id) {
-        setPlaylistManageOpen(true)
-      }
+      const detail = (e as CustomEvent<{ id: string; name?: string }>).detail
+      if (!detail?.id) return
+      onBrowseSelectionChange?.({
+        kind: 'playlist',
+        id: detail.id,
+        name:
+          detail.name ||
+          (browseSelection.kind === 'playlist' && browseSelection.id === detail.id
+            ? browseSelection.name
+            : '播放列表'),
+      })
+      setPlaylistManageOpen(true)
     }
     window.addEventListener('wallpaper-runner:manage-playlist', onManagePlaylist)
     return () => window.removeEventListener('wallpaper-runner:manage-playlist', onManagePlaylist)
   }, [browseSelection])
+
+  useEffect(() => {
+    if (browseSelection.kind !== 'playlist') setPlaylistManageOpen(false)
+  }, [browseSelection.kind])
 
   useEffect(() => {
     if (browseSelection.kind !== 'author') {
@@ -885,15 +895,26 @@ export default function LibraryPage({
                 ))}
               </div>
             ) : (
-              <div className="authors-grid">
-                {visibleAuthors.map((a) => {
+              <VirtualGalleryGrid
+                items={visibleAuthors}
+                className="authors-virtual-scroll"
+                gridClassName="authors-grid"
+                minColWidth={148}
+                coverAspect={1}
+                metaEst={44}
+                gap={18}
+                getKey={(a) => a.author}
+                onOpenIndex={(i) => {
+                  const a = visibleAuthors[i]
+                  if (a) onBrowseSelectionChange?.({ kind: 'author', author: a.author })
+                }}
+                renderItem={(a) => {
                   const avatarRecord = authorAvatarsByAuthor.get(a.author)
                   const avatarUrl = avatarRecord
                     ? api.getAuthorAvatarUrl(avatarRecord.relativePath, avatarRecord.updatedAt)
                     : undefined
                   return (
                     <AuthorCard
-                      key={a.author}
                       author={a.author}
                       count={a.count}
                       coverEntry={authorCoverMap.get(a.author)}
@@ -901,8 +922,8 @@ export default function LibraryPage({
                       onOpen={(author) => onBrowseSelectionChange?.({ kind: 'author', author })}
                     />
                   )
-                })}
-              </div>
+                }}
+              />
             )
           ) : items.length === 0 && !loading ? (
             <div className="empty">
