@@ -54,6 +54,7 @@ const api = {
       dirName: string
       imagePath: string
       crop: { x: number; y: number; width: number; height: number }
+      avatarJpegBase64: string
     },
   ): Promise<AuthorAvatarRecord> => ipcRenderer.invoke('library:setAuthorAvatar', author, payload),
   clearAuthorAvatar: (author: string): Promise<boolean> =>

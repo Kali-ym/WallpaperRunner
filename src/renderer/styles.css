@@ -4770,7 +4770,6 @@ html, body, #root {
 }
 
 .onboarding-root,
-.shortcut-help,
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -4779,32 +4778,66 @@ html, body, #root {
   place-items: center;
   background: var(--deep-scrim);
   backdrop-filter: blur(8px);
+  padding: 24px;
 }
 .onboarding-card,
-.modal-panel {
+.modal-panel,
+.modal-card {
   position: relative;
   z-index: 1;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 22px 22px 18px;
+  padding: 22px 24px 20px;
   box-shadow: var(--shadow-soft);
   color: var(--fg);
-  max-width: min(520px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 48px));
   width: 100%;
+  min-width: 0;
   max-height: min(90vh, 640px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: grid;
   gap: 14px;
+  box-sizing: border-box;
 }
-.modal-panel .text-input {
+.modal-panel > *,
+.modal-card > * {
+  min-width: 0;
+}
+.modal-panel .text-input,
+.modal-card .text-input {
   max-width: none;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-.modal-panel .field {
+.modal-panel .field,
+.modal-card .field {
   display: grid;
   gap: 6px;
   margin: 0;
+}
+.meta-readonly {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  display: grid;
+  gap: 4px;
+}
+.meta-readonly > div {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.modal-panel p,
+.modal-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.modal-panel .modal-actions,
+.modal-card .modal-actions {
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 .drawer-title {
   margin: 0;
@@ -5277,13 +5310,7 @@ html, body, #root {
   border-top: 1px solid var(--border);
 }
 .shortcut-help {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: var(--shadow-soft);
-  color: var(--fg);
-  max-width: min(480px, calc(100vw - 32px));
+  max-width: min(480px, calc(100vw - 48px));
 }
 .shortcut-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
 .shortcut-list li { display: flex; align-items: center; gap: 12px; }

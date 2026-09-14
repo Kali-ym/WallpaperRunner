@@ -46,7 +46,7 @@ export default function EditMetadataModal({
           <div>ID：{entry.galleryId}</div>
           <div>URL：{detail?.sourceUrl || '—'}</div>
         </div>
-        <div className="page-toolbar" style={{ justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>
             取消
           </button>

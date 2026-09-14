@@ -358,6 +358,7 @@ export function registerIpc(): void {
         dirName: string
         imagePath: string
         crop: { x: number; y: number; width: number; height: number }
+        avatarJpegBase64: string
       },
     ) => {
       const record = await authorAvatarStore.set(author, payload)

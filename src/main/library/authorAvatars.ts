@@ -1,12 +1,10 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile, unlink, access, rename } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { nativeImage } from 'electron'
 import type { LibraryStore } from './store'
 
 const AVATAR_DIR = '.author-avatars'
 const INDEX_FILE = 'author-avatars.json'
-const AVATAR_SIZE = 256
 
 type AuthorAvatarCrop = {
   x: number
@@ -137,6 +135,7 @@ export class AuthorAvatarStore {
       dirName: string
       imagePath: string
       crop: AuthorAvatarCrop
+      avatarJpegBase64: string
     },
   ): Promise<AuthorAvatarRecord> {
     const trimmed = author.trim()
@@ -149,6 +148,11 @@ export class AuthorAvatarStore {
       throw new Error('图片不存在')
     }
 
+    const jpeg = Buffer.from(payload.avatarJpegBase64, 'base64')
+    if (jpeg.length < 3 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8 || jpeg[2] !== 0xff) {
+      throw new Error('头像数据无效')
+    }
+
     const key = authorKey(trimmed)
     const file = await this.loadFile()
     const prev = file.avatars[key]
@@ -156,7 +160,8 @@ export class AuthorAvatarStore {
     const relativePath = `${AVATAR_DIR}/${fileName}`
     const outPath = join(this.rootDir, relativePath)
 
-    await cropAndSaveAvatar(absSource, payload.crop, outPath)
+    await mkdir(dirname(outPath), { recursive: true })
+    await writeFile(outPath, jpeg)
 
     const record: AuthorAvatarRecord = {
       author: trimmed,
@@ -244,43 +249,4 @@ export class AuthorAvatarStore {
     await this.saveFile(file)
     return true
   }
-}
-
-async function cropAndSaveAvatar(
-  absSourcePath: string,
-  crop: AuthorAvatarCrop,
-  outPath: string,
-): Promise<void> {
-  const buf = await readFile(absSourcePath)
-  let img = nativeImage.createFromBuffer(buf)
-  if (img.isEmpty()) throw new Error('无法读取图片')
-
-  let { width: iw, height: ih } = img.getSize()
-  const maxEdge = 1920
-  let scale = 1
-  if (Math.max(iw, ih) > maxEdge) {
-    scale = maxEdge / Math.max(iw, ih)
-    img = img.resize({
-      width: Math.max(1, Math.round(iw * scale)),
-      height: Math.max(1, Math.round(ih * scale)),
-      quality: 'good',
-    })
-    iw = Math.max(1, Math.round(iw * scale))
-    ih = Math.max(1, Math.round(ih * scale))
-  }
-
-  const x = Math.max(0, Math.round(crop.x * scale))
-  const y = Math.max(0, Math.round(crop.y * scale))
-  const w = Math.min(Math.round(crop.width * scale), iw - x)
-  const h = Math.min(Math.round(crop.height * scale), ih - y)
-  if (w <= 0 || h <= 0) throw new Error('裁剪区域无效')
-
-  const cropped = img.crop({ x, y, width: w, height: h })
-  const resized = cropped.resize({
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    quality: 'best',
-  })
-  await mkdir(dirname(outPath), { recursive: true })
-  await writeFile(outPath, resized.toJPEG(88))
 }

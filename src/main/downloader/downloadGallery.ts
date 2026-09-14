@@ -176,9 +176,6 @@ export async function downloadGallery(
       signal: opts.signal,
       referer: result.sourceUrl.replace(/\.html$/i, '/1.html'),
       retries: 5,
-      headers: {
-        Accept: '*/*',
-      },
       onProgress: ({ received, total: fileTotal }) => {
         const delta = Math.max(0, received - lastByteMark)
         lastByteMark = received

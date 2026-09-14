@@ -30,7 +30,7 @@ export default function ShortcutHelp({ onClose }: Props): JSX.Element {
             </li>
           ))}
         </ul>
-        <div className="page-toolbar">
+        <div className="modal-actions">
           <button type="button" className="btn primary" onClick={onClose}>
             关闭
           </button>

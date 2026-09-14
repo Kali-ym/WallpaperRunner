@@ -52,7 +52,7 @@ export default function ExtractZipModal({
           解压成功后删除压缩包
         </label>
         {error ? <p className="error-text">{error}</p> : null}
-        <div className="page-toolbar" style={{ justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="btn" disabled={busy} onClick={onSkip}>
             {intoExisting ? '取消' : '仅保留压缩包'}
           </button>

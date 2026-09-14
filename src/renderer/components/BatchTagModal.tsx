@@ -36,7 +36,7 @@ export default function BatchTagModal({ open, busy, onClose, onSubmit }: Props):
             <span>标签</span>
             <input className="text-input" name="tags" placeholder="jk, 国模" autoFocus disabled={busy} />
           </label>
-          <div className="page-toolbar">
+          <div className="modal-actions">
             <button type="button" className="btn" onClick={onClose} disabled={busy}>
               取消
             </button>

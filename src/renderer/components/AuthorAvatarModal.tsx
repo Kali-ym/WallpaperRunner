@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX, type WheelEvent } 
 import Cropper, { type Area } from 'react-easy-crop'
 import 'react-easy-crop/react-easy-crop.css'
 import { api, type AuthorAvatarRecord, type AuthorImageSource } from '../lib/api'
+import { cropAvatarToJpegBase64 } from '../lib/cropAvatarImage'
 import { useConfirm } from '../lib/confirm'
 
 type Props = {
@@ -177,6 +178,7 @@ export default function AuthorAvatarModal({
     setBusy(true)
     setError('')
     try {
+      const avatarJpegBase64 = await cropAvatarToJpegBase64(imageUrl, croppedAreaPixels)
       const record = await api.setAuthorAvatar(author, {
         source: pick.source,
         galleryId: pick.galleryId,
@@ -188,6 +190,7 @@ export default function AuthorAvatarModal({
           width: croppedAreaPixels.width,
           height: croppedAreaPixels.height,
         },
+        avatarJpegBase64,
       })
       onSaved(record)
       onClose()

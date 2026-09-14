@@ -61,6 +61,9 @@ describe('downloadFile helpers', () => {
     expect(result.bytes).toBe(2048)
     const written = await readFile(dest)
     expect(Buffer.compare(written, bytes)).toBe(0)
+    const headers = vi.mocked(httpFetch).mock.calls[0]?.[1]?.headers as Record<string, string>
+    expect(headers.Accept).toMatch(/image\//)
+    expect(headers.Accept).not.toBe('*/*')
   })
 
   it('reports stream progress when body reader is available', async () => {
