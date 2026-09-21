@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { setHttpProxy } from './http/client'
+import { setHttpProxy, setTelegramSocksProxy } from './http/client'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 
@@ -13,6 +13,8 @@ export interface AppSettings {
   taskConcurrency: number
   /** HTTP(S) proxy, e.g. http://127.0.0.1:7890. Empty = direct. */
   proxyUrl: string
+  /** SOCKS5 for Telegram MTProto, e.g. socks5://127.0.0.1:7890. Empty = use HTTP proxy / env. */
+  telegramSocksProxy: string
   /** Local Wallpaper Engine web wallpaper project directory */
   wallpaperEngineDir: string
   /** Rewrite playlist.json when library changes */
@@ -42,6 +44,7 @@ function defaultSettings(): AppSettings {
     taskConcurrency: 2,
     // Clash / common local proxy default; user can clear in settings
     proxyUrl: envProxy || 'http://127.0.0.1:7890',
+    telegramSocksProxy: '',
     wallpaperEngineDir: join(homedir(), 'Documents', 'gallery-we-wallpaper'),
     wallpaperAutoSync: true,
     wallpaperMediaPort: 17989,
@@ -76,6 +79,10 @@ export async function loadSettings(): Promise<AppSettings> {
           : defaults.taskConcurrency,
       proxyUrl:
         typeof parsed.proxyUrl === 'string' ? parsed.proxyUrl.trim() : defaults.proxyUrl,
+      telegramSocksProxy:
+        typeof parsed.telegramSocksProxy === 'string'
+          ? parsed.telegramSocksProxy.trim()
+          : defaults.telegramSocksProxy,
       wallpaperEngineDir:
         typeof parsed.wallpaperEngineDir === 'string' && parsed.wallpaperEngineDir.trim()
           ? parsed.wallpaperEngineDir.trim()
@@ -99,9 +106,11 @@ export async function loadSettings(): Promise<AppSettings> {
       onboardingDone,
     }
     setHttpProxy(settings.proxyUrl || null)
+    setTelegramSocksProxy(settings.telegramSocksProxy || null)
     return settings
   } catch {
     setHttpProxy(defaults.proxyUrl || null)
+    setTelegramSocksProxy(defaults.telegramSocksProxy || null)
     return defaults
   }
 }
@@ -121,6 +130,10 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
         : current.taskConcurrency,
     proxyUrl:
       typeof partial.proxyUrl === 'string' ? partial.proxyUrl.trim() : current.proxyUrl,
+    telegramSocksProxy:
+      typeof partial.telegramSocksProxy === 'string'
+        ? partial.telegramSocksProxy.trim()
+        : current.telegramSocksProxy,
     wallpaperEngineDir:
       typeof partial.wallpaperEngineDir === 'string' && partial.wallpaperEngineDir.trim()
         ? partial.wallpaperEngineDir.trim()
@@ -153,5 +166,6 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
   await mkdir(app.getPath('userData'), { recursive: true })
   await writeFile(settingsPath(), JSON.stringify(next, null, 2), 'utf8')
   setHttpProxy(next.proxyUrl || null)
+  setTelegramSocksProxy(next.telegramSocksProxy || null)
   return next
 }

@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import { Api, TelegramClient } from 'telegram'
 import { StringSession } from 'telegram/sessions'
-import { getHttpProxy } from '../http/client'
+import { getHttpProxy, getTelegramSocksProxy } from '../http/client'
+import { resolveTelegramSocksProxy } from './proxy'
 
 export type TelegramAuthState =
   | 'disconnected'
@@ -20,28 +21,8 @@ export interface TelegramAuthStatus {
   error?: string
 }
 
-interface ProxyConfig {
-  ip: string
-  port: number
-  socksType: 5
-}
-
 function sessionFilePath(): string {
   return join(app.getPath('userData'), 'telegram.session')
-}
-
-function parseSocksProxy(proxyUrl: string | null | undefined): ProxyConfig | undefined {
-  const raw = (proxyUrl ?? '').trim()
-  if (!raw) return undefined
-  try {
-    const u = new URL(raw)
-    const port = Number(u.port || (u.protocol === 'https:' ? 443 : 80))
-    if (!u.hostname || !Number.isFinite(port)) return undefined
-    // Clash mixed-port usually accepts SOCKS5 on the same port as HTTP
-    return { ip: u.hostname, port, socksType: 5 }
-  } catch {
-    return undefined
-  }
 }
 
 export class TelegramService {
@@ -104,7 +85,10 @@ export class TelegramService {
     this.setStatus({ state: 'connecting', error: undefined })
     const sessionStr = await this.loadSessionString()
     const session = new StringSession(sessionStr)
-    const proxy = parseSocksProxy(getHttpProxy())
+    const proxy = resolveTelegramSocksProxy({
+      httpProxy: getHttpProxy(),
+      telegramSocksProxy: getTelegramSocksProxy(),
+    })
 
     if (this.client) {
       try {
@@ -120,6 +104,7 @@ export class TelegramService {
       downloadRetries: 15,
       requestRetries: 8,
       retryDelay: 1500,
+      timeout: 30,
       proxy: proxy as never,
       useWSS: !proxy,
       autoReconnect: true,
@@ -145,9 +130,18 @@ export class TelegramService {
         this.setStatus({ state: 'disconnected', error: undefined })
       }
     } catch (err) {
+      try {
+        await this.client?.disconnect()
+      } catch {
+        /* ignore */
+      }
+      this.client = null
+      const message = err instanceof Error ? err.message : String(err)
       this.setStatus({
         state: 'error',
-        error: err instanceof Error ? err.message : String(err),
+        error: proxy
+          ? message
+          : `${message}（未配置代理时可能无法连接 Telegram，请在「设置 → 网络」填写 SOCKS5）`,
       })
     }
     return this.getStatus()
@@ -163,8 +157,18 @@ export class TelegramService {
     this.rejectWaiters(new Error('登录已重新开始'))
     await this.connect(apiId, apiHash)
     if (!this.client) throw new Error('无法连接 Telegram')
-
+    if (this.status.state === 'error') {
+      return this.getStatus()
+    }
     if (this.status.state === 'authorized') {
+      return this.getStatus()
+    }
+    if (!this.client.connected) {
+      this.setStatus({
+        state: 'error',
+        phone: phoneNormalized,
+        error: '无法连接 Telegram，请确认代理软件已开启并填写 SOCKS5（如 socks5://127.0.0.1:7890）',
+      })
       return this.getStatus()
     }
 

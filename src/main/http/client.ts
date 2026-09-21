@@ -11,6 +11,8 @@ export type HttpFetch = (
 ) => Promise<Response>
 
 let proxyUrl: string | null = null
+/** Optional SOCKS5 for Telegram MTProto; empty = derive from HTTP proxy / env. */
+let telegramSocksProxyUrl: string | null = null
 let agent: ProxyAgent | undefined
 let customFetch: HttpFetch | null = null
 /** Prefer curl.exe on Windows when undici is blocked by Cloudflare. */
@@ -24,6 +26,14 @@ export function setHttpProxy(url: string | null | undefined): void {
 
 export function getHttpProxy(): string | null {
   return proxyUrl
+}
+
+export function setTelegramSocksProxy(url: string | null | undefined): void {
+  telegramSocksProxyUrl = (url ?? '').trim() || null
+}
+
+export function getTelegramSocksProxy(): string | null {
+  return telegramSocksProxyUrl
 }
 
 export function setHttpFetch(fn: HttpFetch | null): void {

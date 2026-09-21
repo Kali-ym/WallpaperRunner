@@ -61,6 +61,7 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
         telegramApiId: settings.telegramApiId,
         telegramApiHash: settings.telegramApiHash,
         proxyUrl: settings.proxyUrl,
+        telegramSocksProxy: settings.telegramSocksProxy,
       },
       true,
     )
@@ -252,6 +253,7 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                     <div className="pref-row stack">
                       <div>
                         <div className="s-title">HTTP 代理</div>
+                        <p className="muted settings-hint">网页下载与图库缩略图</p>
                       </div>
                       <input
                         className="text-input"
@@ -260,6 +262,25 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                         value={settings.proxyUrl}
                         onChange={(e) => setSettings({ ...settings, proxyUrl: e.target.value })}
                         onBlur={() => void save({ proxyUrl: settings.proxyUrl })}
+                      />
+                    </div>
+                    <div className="pref-row stack">
+                      <div>
+                        <div className="s-title">Telegram SOCKS5</div>
+                        <p className="muted settings-hint">
+                          留空则尝试用 HTTP 代理同端口（Clash 混合端口）。v2rayN 等请填
+                          socks5://127.0.0.1:10808
+                        </p>
+                      </div>
+                      <input
+                        className="text-input"
+                        type="text"
+                        placeholder="socks5://127.0.0.1:7890"
+                        value={settings.telegramSocksProxy}
+                        onChange={(e) =>
+                          setSettings({ ...settings, telegramSocksProxy: e.target.value })
+                        }
+                        onBlur={() => void save({ telegramSocksProxy: settings.telegramSocksProxy })}
                       />
                     </div>
                   </div>
