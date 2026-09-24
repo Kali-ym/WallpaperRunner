@@ -22,7 +22,9 @@ type AskExtract = {
 }
 
 function defaultIds(manifest: ResourceManifest): string[] {
-  if (manifest.source === 'telegraph') return listItems(manifest).map((i) => i.id)
+  if (manifest.source === 'telegraph' || manifest.source === 'telegram') {
+    return listItems(manifest).map((i) => i.id)
+  }
   return manifest.groups.post.map((i) => i.id)
 }
 

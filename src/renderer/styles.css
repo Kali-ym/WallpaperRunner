@@ -3840,6 +3840,38 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
 }
+.tg-cancel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tg-guide {
+  margin: 0 0 16px;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+.tg-guide strong {
+  color: var(--fg);
+  font-weight: 650;
+}
+.tg-error {
+  color: var(--danger, #c0392b);
+  margin-bottom: 12px;
+}
+.tg-logged-in {
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border));
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+.tg-logged-in-title {
+  margin: 0 0 6px;
+  font-weight: 650;
+}
 .tg-flow {
   display: grid;
   gap: 14px;
@@ -3855,6 +3887,26 @@ input:focus-visible {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: color-mix(in oklab, var(--bg-deep) 30%, var(--surface));
+}
+.tg-step.is-active {
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.tg-step.is-done {
+  opacity: 0.92;
+}
+.tg-step.is-pending {
+  opacity: 0.72;
+}
+.tg-step.is-active .tg-step-n {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+}
+.tg-step.is-done .tg-step-n {
+  color: var(--accent-strong);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
 }
 .tg-step > div:nth-child(2) {
   min-width: 0;
@@ -3911,6 +3963,9 @@ input:focus-visible {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
+}
+.tg-actions .tg-linkish {
+  font-size: 0.82rem;
 }
 .local-chip {
   display: inline-flex;
@@ -4942,34 +4997,166 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
+}
+.resource-drawer-url:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
 }
 .resource-drawer-close {
   flex-shrink: 0;
 }
 .resource-drawer-toolbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 10px 20px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--panel-tint);
+}
+.resource-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.resource-toolbar-row-actions {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.resource-toolbar-label {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  width: 4.5rem;
+}
+.resource-scope-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.resource-scope-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 550;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.resource-scope-tab:hover {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+.resource-scope-tab.active {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  color: var(--accent-strong);
+}
+.resource-scope-tab-n {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--wash);
+}
+.resource-scope-tab.active .resource-scope-tab-n {
+  color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
 }
 .resource-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.resource-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  align-self: center;
+  background: var(--border);
+  margin: 0 2px;
 }
 .resource-toolbar-stat {
+  flex-shrink: 0;
   font-size: 0.86rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: right;
+}
+.resource-toolbar-stat-sub {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 2px;
 }
 .resource-toolbar-stat strong {
   color: var(--accent-strong);
   font-weight: 650;
+}
+.resource-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--panel-tint) 60%, var(--surface));
+}
+.resource-stat-chip {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--text);
+}
+.resource-stat-chip.muted {
+  color: var(--muted);
+}
+.resource-stats-details {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.resource-stats-details summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.resource-stats-details summary::-webkit-details-marker {
+  display: none;
+}
+.resource-stats-details summary::before {
+  content: 'ⓘ ';
+  opacity: 0.7;
+}
+.resource-stats-details p {
+  margin: 8px 0 0;
+  max-width: 42rem;
+  line-height: 1.45;
+}
+.resource-drawer-banner {
+  margin: 0;
+  padding: 8px 20px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
 .resource-drawer-error {
   margin: 0;
@@ -5026,6 +5213,22 @@ html, body, #root {
   font-size: 0.92rem;
   font-weight: 600;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-section-preview {
+  font-weight: 400;
+}
+.resource-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.resource-section-toggle {
+  padding: 2px 8px !important;
+  font-size: 0.72rem !important;
 }
 .resource-section-count {
   flex-shrink: 0;

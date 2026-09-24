@@ -39,6 +39,15 @@ export interface TelegraphResourceGroup {
   items: ResourceItem[]
 }
 
+export interface ResourceManifestMeta {
+  /** Comment count shown on the channel post in Telegram. */
+  telegramReportedComments?: number
+  /** Reply messages fetched from the discussion thread. */
+  telegramFetchedComments?: number
+  /** Comment groups that contain at least one image/video/file. */
+  telegramCommentGroupsWithMedia?: number
+}
+
 export interface ResourceManifest {
   id: string
   source: 'telegram' | 'telegraph'
@@ -46,6 +55,7 @@ export interface ResourceManifest {
   title: string
   author?: string
   galleryId: string
+  meta?: ResourceManifestMeta
   groups: {
     post: ResourceItem[]
     comments: CommentResourceGroup[]

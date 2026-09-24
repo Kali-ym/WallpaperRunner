@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isAuthKeyDuplicatedError } from '../../src/main/telegram/client'
 import { parseSocksProxyUrl, resolveTelegramSocksProxy } from '../../src/main/telegram/proxy'
 
 describe('parseSocksProxyUrl', () => {
@@ -27,6 +28,14 @@ describe('parseSocksProxyUrl', () => {
       username: 'user',
       password: 'pass',
     })
+  })
+})
+
+describe('isAuthKeyDuplicatedError', () => {
+  it('detects AUTH_KEY_DUPLICATED', () => {
+    expect(isAuthKeyDuplicatedError(new Error('406: AUTH_KEY_DUPLICATED (caused by InvokeWithLayer)'))).toBe(
+      true,
+    )
   })
 })
 

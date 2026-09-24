@@ -771,6 +771,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('telegram:waitLogin', async () => telegramService.waitForLogin())
 
+  ipcMain.handle('telegram:cancelLogin', async () => telegramService.cancelLogin())
+
   ipcMain.handle('telegram:logout', async () => telegramService.logout())
 
   ipcMain.handle('window:minimize', (e) => {

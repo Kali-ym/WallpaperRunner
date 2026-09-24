@@ -25,6 +25,38 @@ function sessionFilePath(): string {
   return join(app.getPath('userData'), 'telegram.session')
 }
 
+export function isAuthKeyDuplicatedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes('AUTH_KEY_DUPLICATED')
+}
+
+const AUTH_KEY_DUPLICATED_HINT =
+  'Telegram 会话冲突（AUTH_KEY_DUPLICATED）：请关闭其他 WallpaperRunner 窗口、开发版 (npm run dev) 或占用同一账号的程序，然后在设置里退出登录后重新发送验证码'
+
+function formatConnectError(err: unknown, hasProxy: boolean): string {
+  if (isAuthKeyDuplicatedError(err)) return AUTH_KEY_DUPLICATED_HINT
+  const raw = err instanceof Error ? err.message : String(err)
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('econnrefused') ||
+    lower.includes('connect econnrefused') ||
+    lower.includes('proxy') ||
+    lower.includes('socks')
+  ) {
+    return hasProxy
+      ? `代理无法连通 Telegram（${raw}）。请确认代理软件已启动，并在「设置 → 网络」填写正确的 SOCKS5，例如 socks5://127.0.0.1:7890 或 v2ray 的 10808 端口`
+      : `无法连接（${raw}）。请在「设置 → 网络」配置 SOCKS5 代理后再试`
+  }
+  if (lower.includes('timed out') || lower.includes('timeout')) {
+    return hasProxy
+      ? `连接 Telegram 超时（${raw}）。请检查代理规则是否放行 Telegram`
+      : `连接超时（${raw}）。未配置代理时通常无法连接，请在「设置 → 网络」填写 SOCKS5`
+  }
+  return hasProxy
+    ? raw
+    : `${raw}（未配置代理时可能无法连接 Telegram，请在「设置 → 网络」填写 SOCKS5）`
+}
+
 export class TelegramService {
   private client: TelegramClient | null = null
   private status: TelegramAuthStatus = { state: 'disconnected' }
@@ -35,6 +67,7 @@ export class TelegramService {
     reject: (e: Error) => void
   } | null = null
   private loginPromise: Promise<void> | null = null
+  private connectGate: Promise<void> = Promise.resolve()
 
   getStatus(): TelegramAuthStatus {
     return { ...this.status }
@@ -67,6 +100,50 @@ export class TelegramService {
     this.status = { ...this.status, ...partial }
   }
 
+  private runExclusive<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.connectGate.then(work)
+    this.connectGate = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
+
+  private async destroyClient(): Promise<void> {
+    if (!this.client) return
+    try {
+      await this.client.destroy()
+    } catch {
+      try {
+        await this.client.disconnect()
+      } catch {
+        /* ignore */
+      }
+    }
+    this.client = null
+    await new Promise((r) => setTimeout(r, 400))
+  }
+
+  private async wipeSessionFile(): Promise<void> {
+    try {
+      await unlink(sessionFilePath())
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async handleAuthKeyDuplicated(): Promise<void> {
+    this.rejectWaiters(new Error(AUTH_KEY_DUPLICATED_HINT))
+    this.loginPromise = null
+    await this.destroyClient()
+    await this.wipeSessionFile()
+    this.setStatus({
+      state: 'disconnected',
+      username: undefined,
+      error: AUTH_KEY_DUPLICATED_HINT,
+    })
+  }
+
   async getClient(apiId: number, apiHash: string): Promise<TelegramClient> {
     if (this.client && this.client.connected) {
       return this.client
@@ -77,6 +154,10 @@ export class TelegramService {
   }
 
   async connect(apiId: number, apiHash: string): Promise<TelegramAuthStatus> {
+    return this.runExclusive(() => this.connectInternal(apiId, apiHash))
+  }
+
+  private async connectInternal(apiId: number, apiHash: string): Promise<TelegramAuthStatus> {
     if (!apiId || !apiHash) {
       this.setStatus({ state: 'error', error: '请先填写 api_id 与 api_hash' })
       return this.getStatus()
@@ -90,14 +171,7 @@ export class TelegramService {
       telegramSocksProxy: getTelegramSocksProxy(),
     })
 
-    if (this.client) {
-      try {
-        await this.client.disconnect()
-      } catch {
-        /* ignore */
-      }
-      this.client = null
-    }
+    await this.destroyClient()
 
     this.client = new TelegramClient(session, apiId, apiHash, {
       connectionRetries: 10,
@@ -130,18 +204,14 @@ export class TelegramService {
         this.setStatus({ state: 'disconnected', error: undefined })
       }
     } catch (err) {
-      try {
-        await this.client?.disconnect()
-      } catch {
-        /* ignore */
+      if (isAuthKeyDuplicatedError(err)) {
+        await this.handleAuthKeyDuplicated()
+        return this.getStatus()
       }
-      this.client = null
-      const message = err instanceof Error ? err.message : String(err)
+      await this.destroyClient()
       this.setStatus({
         state: 'error',
-        error: proxy
-          ? message
-          : `${message}（未配置代理时可能无法连接 Telegram，请在「设置 → 网络」填写 SOCKS5）`,
+        error: formatConnectError(err, Boolean(proxy)),
       })
     }
     return this.getStatus()
@@ -156,19 +226,17 @@ export class TelegramService {
 
     this.rejectWaiters(new Error('登录已重新开始'))
     await this.connect(apiId, apiHash)
-    if (!this.client) throw new Error('无法连接 Telegram')
-    if (this.status.state === 'error') {
-      return this.getStatus()
-    }
-    if (this.status.state === 'authorized') {
-      return this.getStatus()
-    }
-    if (!this.client.connected) {
+    if (this.status.state === 'error' || !this.client || !this.client.connected) {
       this.setStatus({
         state: 'error',
         phone: phoneNormalized,
-        error: '无法连接 Telegram，请确认代理软件已开启并填写 SOCKS5（如 socks5://127.0.0.1:7890）',
+        error:
+          this.status.error ??
+          '无法连接 Telegram，请确认代理软件已开启并填写 SOCKS5（如 socks5://127.0.0.1:7890）',
       })
+      return this.getStatus()
+    }
+    if (this.status.state === 'authorized') {
       return this.getStatus()
     }
 
@@ -215,6 +283,11 @@ export class TelegramService {
       } catch (err) {
         this.codeWaiter = null
         this.passwordWaiter = null
+        if (isAuthKeyDuplicatedError(err)) {
+          await this.handleAuthKeyDuplicated()
+          this.setStatus({ phone: phoneNormalized })
+          return
+        }
         this.setStatus({
           state: 'error',
           phone: phoneNormalized,
@@ -240,10 +313,29 @@ export class TelegramService {
       await new Promise((r) => setTimeout(r, 200))
     }
     if (this.getStatus().state === 'connecting') {
+      this.rejectWaiters(new Error('发送验证码超时'))
+      this.loginPromise = null
       this.setStatus({
         state: 'error',
         phone: phoneNormalized,
-        error: '连接 Telegram 超时，请检查代理或网络后重试',
+        error: '发送验证码超时，请检查代理或网络后重试',
+      })
+    }
+    return this.getStatus()
+  }
+
+  async cancelLogin(): Promise<TelegramAuthStatus> {
+    this.rejectWaiters(new Error('登录已取消'))
+    this.loginPromise = null
+    if (
+      this.status.state === 'connecting' ||
+      this.status.state === 'need_code' ||
+      this.status.state === 'need_password'
+    ) {
+      this.setStatus({
+        state: 'disconnected',
+        phone: this.status.phone,
+        error: undefined,
       })
     }
     return this.getStatus()
@@ -255,7 +347,7 @@ export class TelegramService {
       throw new Error('验证码不能为空')
     }
     if (!this.codeWaiter) {
-      throw new Error('当前还不能提交验证码：请先点「发送验证码 / 登录」，等状态变为 need_code')
+      throw new Error('请先点「发送验证码」，等状态变为「等待验证码」后再提交')
     }
     this.codeWaiter.resolve(trimmed)
     this.codeWaiter = null
@@ -318,7 +410,15 @@ export class TelegramService {
       /* ignore */
     }
     await new Promise((r) => setTimeout(r, 2000))
-    await this.client.connect()
+    try {
+      await this.client.connect()
+    } catch (err) {
+      if (isAuthKeyDuplicatedError(err)) {
+        await this.handleAuthKeyDuplicated()
+        throw new Error(AUTH_KEY_DUPLICATED_HINT)
+      }
+      throw err
+    }
     if (!(await this.client.checkAuthorization())) {
       this.setStatus({ state: 'disconnected', error: '会话已失效，请重新登录' })
       throw new Error('Telegram 会话已失效，请重新登录')
@@ -330,14 +430,7 @@ export class TelegramService {
 
   async disconnect(): Promise<void> {
     this.rejectWaiters(new Error('已断开'))
-    if (this.client) {
-      try {
-        await this.client.disconnect()
-      } catch {
-        /* ignore */
-      }
-      this.client = null
-    }
+    await this.destroyClient()
     if (this.status.state !== 'error') {
       this.setStatus({ state: 'disconnected', username: undefined })
     }

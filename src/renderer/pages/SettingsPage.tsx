@@ -3,6 +3,11 @@ import { useToast } from '../lib/toast'
 import { api, type AppSettings, type TelegramAuthStatus } from '../lib/api'
 import { emitThemeChanged, type ThemePreference } from '../lib/theme'
 
+function hasTelegramCreds(settings: AppSettings): boolean {
+  const id = Number.parseInt(settings.telegramApiId, 10)
+  return Number.isFinite(id) && id > 0 && settings.telegramApiHash.trim().length > 0
+}
+
 function tgBadge(state: TelegramAuthStatus['state'] | undefined): { label: string; tone: string } {
   switch (state) {
     case 'authorized':
@@ -28,7 +33,7 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [group, setGroup] = useState<'general' | 'network' | 'telegram' | 'wallpaper'>('general')
-  const [tgBusy, setTgBusy] = useState(false)
+  const [tgAction, setTgAction] = useState<'send' | 'confirm' | '2fa' | 'restore' | null>(null)
   const persistedRef = useRef<AppSettings | null>(null)
 
   useEffect(() => {
@@ -39,6 +44,29 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
     })
     void api.telegramStatus().then(setTgStatus)
   }, [active])
+
+  useEffect(() => {
+    if (!active || group !== 'telegram') return
+    const polling =
+      tgAction !== null ||
+      tgStatus?.state === 'connecting' ||
+      tgStatus?.state === 'need_code' ||
+      tgStatus?.state === 'need_password'
+    if (!polling) return
+    const id = window.setInterval(() => {
+      void api.telegramStatus().then(setTgStatus)
+    }, 500)
+    return () => window.clearInterval(id)
+  }, [active, group, tgAction, tgStatus?.state])
+
+  useEffect(() => {
+    if (
+      tgAction === 'send' &&
+      (tgStatus?.state === 'need_code' || tgStatus?.state === 'need_password')
+    ) {
+      setTgAction(null)
+    }
+  }, [tgAction, tgStatus?.state])
 
   async function save(partial: Partial<AppSettings>, quiet = false): Promise<AppSettings> {
     const base = persistedRef.current ?? settings
@@ -71,6 +99,123 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
 
   const badge = tgBadge(tgStatus?.state)
   const theme = settings.theme ?? 'system'
+  const tgState = tgStatus?.state
+  const credsOk = hasTelegramCreds(settings)
+  const loggedIn = tgState === 'authorized'
+  const waitingCode = tgState === 'need_code'
+  const waiting2fa = tgState === 'need_password'
+  const step1Done = credsOk
+  const tgBusy = tgAction !== null
+  const step3Active =
+    waitingCode || waiting2fa || tgAction === 'confirm' || tgAction === '2fa'
+  const step2Active = !loggedIn && !step3Active
+  const showTgCancel =
+    !loggedIn &&
+    (tgAction !== null ||
+      tgStatus?.state === 'connecting' ||
+      waitingCode ||
+      waiting2fa)
+
+  async function cancelTelegramLogin(): Promise<void> {
+    setTgAction(null)
+    const s = await api.telegramCancelLogin()
+    setTgStatus(s)
+    toast.info('已取消，可重新发送验证码')
+  }
+
+  async function sendTelegramCode(): Promise<void> {
+    if (!phone.trim()) {
+      toast.error('请先填写手机号（含国家区号，如 +86…）')
+      return
+    }
+    if (!credsOk) {
+      toast.error('请先填写并保存 api_id / api_hash')
+      return
+    }
+    setTgAction('send')
+    try {
+      await persistTelegramCreds()
+      const s = await api.telegramStartLogin(phone)
+      setTgStatus(s)
+      if (s.state === 'authorized') toast.success('登录成功')
+      else if (s.state === 'need_code') toast.info('验证码已发送，请在步骤 3 填写后点「完成登录」')
+      else if (s.state === 'need_password') toast.info('请填写两步验证密码')
+      else if (s.state === 'error') toast.error(s.error || '发送失败')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTgAction(null)
+    }
+  }
+
+  async function confirmTelegramCode(): Promise<void> {
+    if (!code.trim()) {
+      toast.error('请填写 Telegram App 收到的验证码')
+      return
+    }
+    setTgAction('confirm')
+    try {
+      const s = await api.telegramSubmitCode(code.trim())
+      setTgStatus(s)
+      if (s.state === 'authorized') {
+        toast.success('登录成功')
+        return
+      }
+      const final = await api.telegramWaitLogin()
+      setTgStatus(final)
+      if (final.state === 'authorized') toast.success('登录成功')
+      else if (final.state === 'need_password') toast.info('账号有两步验证，请填写密码后确认')
+      else if (final.error) toast.error(final.error)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTgAction(null)
+    }
+  }
+
+  async function confirmTelegram2fa(): Promise<void> {
+    if (!password) {
+      toast.error('请填写两步验证密码')
+      return
+    }
+    setTgAction('2fa')
+    try {
+      const s = await api.telegramSubmitPassword(password)
+      setTgStatus(s)
+      if (s.state === 'authorized') {
+        toast.success('登录成功')
+        return
+      }
+      const final = await api.telegramWaitLogin()
+      setTgStatus(final)
+      if (final.state === 'authorized') toast.success('登录成功')
+      else if (final.error) toast.error(final.error)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTgAction(null)
+    }
+  }
+
+  async function restoreTelegramSession(): Promise<void> {
+    if (!credsOk) {
+      toast.error('请先填写 api_id / api_hash')
+      return
+    }
+    setTgAction('restore')
+    try {
+      await persistTelegramCreds()
+      const s = await api.telegramConnect()
+      setTgStatus(s)
+      if (s.state === 'authorized') toast.success('已恢复登录')
+      else if (s.state === 'error') toast.error(s.error || '无法恢复，请按步骤重新发验证码')
+      else toast.info('没有可用的 session，请发送验证码登录')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTgAction(null)
+    }
+  }
 
   return (
     <section className="page settings-page panel wide">
@@ -295,189 +440,198 @@ export default function SettingsPage({ active = true }: { active?: boolean }): J
                     <h3 className="settings-section-title">Telegram</h3>
                     <span className={`status-badge ${badge.tone}`}>{badge.label}</span>
                   </div>
-                  {tgStatus?.username || tgStatus?.error ? (
-                    <p className="settings-status">
-                      {tgStatus?.username ? `@${tgStatus.username}` : ''}
-                      {tgStatus?.error ? ` ${tgStatus.error}` : ''}
-                    </p>
+                  {tgStatus?.error && !loggedIn ? (
+                    <p className="settings-status tg-error">{tgStatus.error}</p>
                   ) : null}
-                  <div className="tg-flow">
-                    <div className="tg-step">
-                      <div className="tg-step-n">1</div>
-                      <div>
-                        <h4>凭据</h4>
-                        <div className="tg-fields">
-                          <input
-                            className="text-input"
-                            type="text"
-                            placeholder="api_id"
-                            value={settings.telegramApiId}
-                            onChange={(e) => setSettings({ ...settings, telegramApiId: e.target.value })}
-                            onBlur={() => void save({ telegramApiId: settings.telegramApiId })}
-                          />
-                          <input
-                            className="text-input"
-                            type="text"
-                            placeholder="api_hash"
-                            value={settings.telegramApiHash}
-                            onChange={(e) => setSettings({ ...settings, telegramApiHash: e.target.value })}
-                            onBlur={() => void save({ telegramApiHash: settings.telegramApiHash })}
-                          />
-                        </div>
+
+                  {loggedIn ? (
+                    <div className="tg-logged-in">
+                      <p className="tg-logged-in-title">
+                        已登录{tgStatus?.username ? ` · @${tgStatus.username}` : ''}
+                      </p>
+                      <p className="muted">下载 Telegram 资源时会自动使用此账号。</p>
+                      <div className="tg-actions">
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={tgBusy}
+                          onClick={() =>
+                            void api.telegramLogout().then((s) => {
+                              setTgStatus(s)
+                              setCode('')
+                              setPassword('')
+                              toast.info('已登出，可重新按步骤登录')
+                            })
+                          }
+                        >
+                          退出登录
+                        </button>
                       </div>
                     </div>
-                    <div className="tg-step">
-                      <div className="tg-step-n">2</div>
-                      <div>
-                        <h4>手机号发码</h4>
-                        <div className="tg-fields">
-                          <input
-                            className="text-input tg-phone-input"
-                            type="text"
-                            placeholder="+86…"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                          />
-                        </div>
-                        <div className="tg-actions">
+                  ) : (
+                    <>
+                      <ol className="tg-guide">
+                        <li>填写 my.telegram.org 的 api_id、api_hash（失焦自动保存）</li>
+                        <li>填写手机号，点<strong>发送验证码</strong></li>
+                        <li>在 Telegram App 查看验证码，点<strong>完成登录</strong></li>
+                      </ol>
+                      {showTgCancel ? (
+                        <div className="tg-cancel-row">
                           <button
                             type="button"
                             className="btn btn-ghost"
-                            disabled={tgBusy}
-                            onClick={() =>
-                              void (async () => {
-                                setTgBusy(true)
-                                try {
-                                  await persistTelegramCreds()
-                                  const s = await api.telegramConnect()
-                                  setTgStatus(s)
-                                  if (s.state === 'authorized') toast.success('已连接 Telegram')
-                                  else if (s.state === 'error') toast.error(s.error || '连接失败')
-                                  else toast.info(`状态：${s.state}`)
-                                } catch (err) {
-                                  toast.error(err instanceof Error ? err.message : String(err))
-                                } finally {
-                                  setTgBusy(false)
-                                }
-                              })()
-                            }
+                            onClick={() => void cancelTelegramLogin()}
                           >
-                            连接 session
+                            取消当前操作
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={tgBusy}
-                            onClick={() =>
-                              void (async () => {
-                                setTgBusy(true)
-                                try {
-                                  await persistTelegramCreds()
-                                  const s = await api.telegramStartLogin(phone)
-                                  setTgStatus(s)
-                                  if (s.state === 'authorized') toast.success('登录成功')
-                                  else if (s.state === 'need_code') toast.info('请填写验证码后提交')
-                                  else if (s.state === 'need_password') toast.info('请填写两步验证密码')
-                                  else if (s.state === 'error') toast.error(s.error || '登录失败')
-                                  else toast.info(`状态：${s.state}`)
-                                } catch (err) {
-                                  toast.error(err instanceof Error ? err.message : String(err))
-                                } finally {
-                                  setTgBusy(false)
+                          <span className="muted">
+                            {badge.label !== '未连接' ? `当前：${badge.label}` : null}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="tg-flow">
+                        <div
+                          className={
+                            step1Done
+                              ? 'tg-step is-done'
+                              : !step2Active && !step3Active
+                                ? 'tg-step is-active'
+                                : 'tg-step'
+                          }
+                        >
+                          <div className="tg-step-n">1</div>
+                          <div>
+                            <h4>API 凭据</h4>
+                            <p className="muted">从 my.telegram.org 创建应用后复制</p>
+                            <div className="tg-fields">
+                              <input
+                                className="text-input"
+                                type="text"
+                                placeholder="api_id"
+                                value={settings.telegramApiId}
+                                onChange={(e) =>
+                                  setSettings({ ...settings, telegramApiId: e.target.value })
                                 }
-                              })()
-                            }
-                          >
-                            发送验证码
-                          </button>
+                                onBlur={() => void save({ telegramApiId: settings.telegramApiId })}
+                              />
+                              <input
+                                className="text-input"
+                                type="text"
+                                placeholder="api_hash"
+                                value={settings.telegramApiHash}
+                                onChange={(e) =>
+                                  setSettings({ ...settings, telegramApiHash: e.target.value })
+                                }
+                                onBlur={() =>
+                                  void save({ telegramApiHash: settings.telegramApiHash })
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className={
+                            step2Active
+                              ? 'tg-step is-active'
+                              : waitingCode || waiting2fa
+                                ? 'tg-step is-done'
+                                : 'tg-step'
+                          }
+                        >
+                          <div className="tg-step-n">2</div>
+                          <div>
+                            <h4>发送验证码</h4>
+                            <p className="muted">手机号需含国家区号，例如 +86…</p>
+                            <div className="tg-fields">
+                              <input
+                                className="text-input tg-phone-input"
+                                type="text"
+                                placeholder="+86 138…"
+                                value={phone}
+                                disabled={tgBusy || waitingCode || waiting2fa}
+                                onChange={(e) => setPhone(e.target.value)}
+                              />
+                            </div>
+                            <div className="tg-actions">
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={tgBusy || !credsOk || !phone.trim()}
+                                onClick={() => void sendTelegramCode()}
+                              >
+                                {tgAction === 'send' ? '发送中…' : '发送验证码'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost tg-linkish"
+                                disabled={tgBusy || !credsOk}
+                                onClick={() => void restoreTelegramSession()}
+                              >
+                                已有 session？尝试恢复
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={step3Active ? 'tg-step is-active' : 'tg-step is-pending'}>
+                          <div className="tg-step-n">3</div>
+                          <div>
+                            <h4>完成登录</h4>
+                            <p className="muted">
+                              {waiting2fa
+                                ? '账号开启了两步验证，请填写密码'
+                                : waitingCode
+                                  ? '验证码已发送，请在 Telegram App 中查看'
+                                  : '请先完成步骤 2 发送验证码'}
+                            </p>
+                            <div className="tg-fields">
+                              <input
+                                className="text-input"
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                placeholder="短信 / App 验证码"
+                                value={code}
+                                disabled={!waitingCode && !waiting2fa}
+                                onChange={(e) => setCode(e.target.value)}
+                              />
+                              {waiting2fa ? (
+                                <input
+                                  className="text-input"
+                                  type="password"
+                                  placeholder="两步验证密码"
+                                  value={password}
+                                  onChange={(e) => setPassword(e.target.value)}
+                                />
+                              ) : null}
+                            </div>
+                            <div className="tg-actions">
+                              {waiting2fa ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={tgBusy || !password}
+                                  onClick={() => void confirmTelegram2fa()}
+                                >
+                                  {tgAction === '2fa' ? '确认中…' : '确认两步验证'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={tgBusy || !waitingCode || !code.trim()}
+                                  onClick={() => void confirmTelegramCode()}
+                                >
+                                  {tgAction === 'confirm' ? '登录中…' : '完成登录'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="tg-step">
-                      <div className="tg-step-n">3</div>
-                      <div>
-                        <h4>验证码 / 2FA</h4>
-                        <div className="tg-fields">
-                          <input
-                            className="text-input"
-                            type="text"
-                            placeholder="验证码"
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
-                          />
-                          <input
-                            className="text-input"
-                            type="password"
-                            placeholder="两步验证密码"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                          />
-                        </div>
-                        <div className="tg-actions">
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() =>
-                              void (async () => {
-                                if (!code.trim()) {
-                                  toast.error('请先填写验证码')
-                                  return
-                                }
-                                try {
-                                  const s = await api.telegramSubmitCode(code.trim())
-                                  setTgStatus(s)
-                                  if (s.state === 'authorized') {
-                                    toast.success('登录成功')
-                                    return
-                                  }
-                                  const final = await api.telegramWaitLogin()
-                                  setTgStatus(final)
-                                  if (final.state === 'authorized') toast.success('登录成功')
-                                  else if (final.state === 'need_password') toast.info('请填写两步验证密码')
-                                  else if (final.error) toast.error(final.error)
-                                } catch (err) {
-                                  toast.error(err instanceof Error ? err.message : String(err))
-                                }
-                              })()
-                            }
-                          >
-                            提交验证码
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() =>
-                              void api.telegramSubmitPassword(password).then((s) => {
-                                setTgStatus(s)
-                                if (s.state === 'authorized') {
-                                  toast.success('登录成功')
-                                  return
-                                }
-                                void api.telegramWaitLogin().then((final) => {
-                                  setTgStatus(final)
-                                  if (final.state === 'authorized') toast.success('登录成功')
-                                })
-                              })
-                            }
-                          >
-                            提交 2FA
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() =>
-                              void api.telegramLogout().then((s) => {
-                                setTgStatus(s)
-                                toast.info('已登出 Telegram')
-                              })
-                            }
-                          >
-                            登出
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </section>
               </div>
             ) : null}

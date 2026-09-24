@@ -176,6 +176,8 @@ const api = {
   telegramSubmitPassword: (password: string): Promise<TelegramAuthStatus> =>
     ipcRenderer.invoke('telegram:submitPassword', password),
   telegramWaitLogin: (): Promise<TelegramAuthStatus> => ipcRenderer.invoke('telegram:waitLogin'),
+  telegramCancelLogin: (): Promise<TelegramAuthStatus> =>
+    ipcRenderer.invoke('telegram:cancelLogin'),
   telegramLogout: (): Promise<TelegramAuthStatus> => ipcRenderer.invoke('telegram:logout'),
   pickWallpaperDir: (): Promise<string | null> =>
     ipcRenderer.invoke('settings:pickWallpaperDir'),
