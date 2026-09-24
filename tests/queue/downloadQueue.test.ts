@@ -83,15 +83,22 @@ describe('queue persist helpers', () => {
 
 describe('DownloadQueue', () => {
   const dirs: string[] = []
+  /** Minimal valid JPEG so validateImageBuffer accepts the mock body. */
+  const jpegBytes = Buffer.from(
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBEQACEQADAP/Z',
+    'base64',
+  )
+  // Pad past the 1KB minimum size check in validateImageBuffer.
+  const imageBytes = Buffer.concat([jpegBytes, Buffer.alloc(1200, 0)])
 
   beforeEach(() => {
     clearAdapters()
-    const bytes = Buffer.alloc(2048, 2)
     vi.mocked(httpFetch).mockResolvedValue({
       ok: true,
       status: 200,
       headers: { get: () => 'image/jpeg' },
-      arrayBuffer: async () => bytes,
+      arrayBuffer: async () =>
+        imageBytes.buffer.slice(imageBytes.byteOffset, imageBytes.byteOffset + imageBytes.byteLength),
       text: async () => '',
     } as unknown as Response)
   })

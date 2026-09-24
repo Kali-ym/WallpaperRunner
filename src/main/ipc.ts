@@ -104,6 +104,7 @@ async function runWallpaperSync(): Promise<SyncWallpaperResult | null> {
         settings.wallpaperEngineDir,
         settings.wallpaperMediaPort || DEFAULT_MEDIA_PORT,
         playlistStore,
+        authorAvatarStore,
       )
       await ensureMediaServer()
       return result
@@ -311,6 +312,7 @@ export function registerIpc(): void {
       settings.wallpaperEngineDir,
       settings.wallpaperMediaPort || DEFAULT_MEDIA_PORT,
       playlistStore,
+      authorAvatarStore,
     )
     const path = await installWallpaperMediaStartup(settings.wallpaperEngineDir)
     await ensureMediaServer()

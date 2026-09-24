@@ -6,6 +6,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { LibraryStore } from '../src/main/library/store'
 import { PlaylistStore } from '../src/main/library/playlists'
+import { AuthorAvatarStore } from '../src/main/library/authorAvatars'
 import { syncWallpaperEngineProject } from '../src/main/wallpaper/exportWallpaper'
 
 async function main(): Promise<void> {
@@ -14,8 +15,9 @@ async function main(): Promise<void> {
     process.env.WE_WALLPAPER_DIR || join(homedir(), 'Documents', 'gallery-we-wallpaper')
   const store = new LibraryStore(root)
   const playlists = new PlaylistStore(root)
+  const avatars = new AuthorAvatarStore(root)
   await store.ensureRoot()
-  const result = await syncWallpaperEngineProject(store, weDir, 17989, playlists)
+  const result = await syncWallpaperEngineProject(store, weDir, 17989, playlists, avatars)
   console.log(JSON.stringify(result, null, 2))
 }
 

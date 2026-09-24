@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import type { LibraryStore } from '../library/store'
 import type { PlaylistStore } from '../library/playlists'
+import { authorKey, type AuthorAvatarStore } from '../library/authorAvatars'
 import { INDEX_HTML, MAIN_JS, buildProjectJson } from './templateFiles'
 import { writeWallpaperMediaLaunchers } from './startup'
 
 export interface WallpaperPlaylistGallery {
   id: string
   title: string
+  author: string
+  avatar: string
   favorite: boolean
   /** Paths relative to gallery root, e.g. dirName/001.jpg */
   images: string[]
@@ -85,11 +88,13 @@ WE 无法直接读图库外的本地文件，因此需要本机媒体服务：
 `
 
 async function copyMediaServerScript(dir: string): Promise<void> {
-  const candidates = [
-    join(process.resourcesPath, 'we-media-server.mjs'),
+  const candidates: string[] = [
     join(process.cwd(), 'scripts', 'we-media-server.mjs'),
     join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/we-media-server.mjs'),
   ]
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath) {
+    candidates.unshift(join(process.resourcesPath, 'we-media-server.mjs'))
+  }
   let body: string | null = null
   for (const c of candidates) {
     try {
@@ -206,6 +211,7 @@ export async function syncWallpaperEngineProject(
   wallpaperDir: string,
   mediaPort: number = DEFAULT_MEDIA_PORT,
   playlistStore?: PlaylistStore,
+  avatarStore?: Pick<AuthorAvatarStore, 'list'>,
 ): Promise<SyncWallpaperResult> {
   const dir = wallpaperDir.trim()
   if (!dir) throw new Error('Wallpaper Engine 工程目录为空')
@@ -233,6 +239,13 @@ export async function syncWallpaperEngineProject(
     await playlistStore.pruneMissing(entries)
   }
 
+  const avatarByKey = new Map<string, string>()
+  if (avatarStore) {
+    for (const rec of await avatarStore.list()) {
+      avatarByKey.set(authorKey(rec.author), rec.relativePath.replace(/\\/g, '/'))
+    }
+  }
+
   const galleries: WallpaperPlaylistGallery[] = []
   let imageCount = 0
   const aliveIds = new Set<string>()
@@ -247,10 +260,14 @@ export async function syncWallpaperEngineProject(
 
     const title = (meta.displayTitle?.trim() || meta.title || entry.title).trim()
     const id = `${meta.source}/${meta.galleryId}`
+    const author = (meta.author || entry.author || '').trim()
+    const avatar = author ? avatarByKey.get(authorKey(author)) || '' : ''
     aliveIds.add(id)
     galleries.push({
       id,
       title,
+      author,
+      avatar,
       favorite: Boolean(meta.favorite ?? entry.favorite),
       images,
     })

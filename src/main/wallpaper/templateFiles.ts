@@ -90,6 +90,17 @@ export function buildProjectJson(playlists: { id: string; name: string }[]): str
           fraction: true,
           precision: 1,
         },
+        infooverlay: {
+          order: 8,
+          text: 'Info overlay',
+          type: 'combo',
+          value: 'always',
+          options: [
+            { label: 'Always on', value: 'always' },
+            { label: 'On gallery change', value: 'fade' },
+            { label: 'Hidden', value: 'hidden' },
+          ],
+        },
       },
       supportsaudioprocessing: false,
     },
@@ -115,7 +126,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
       height: 100%;
       overflow: hidden;
       background: #0a0a0a;
-      font-family: "Segoe UI", system-ui, sans-serif;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       color: #ccc;
     }
     #stage {
@@ -207,11 +218,96 @@ export const INDEX_HTML = `<!DOCTYPE html>
       color: #f0f0f0;
       z-index: 10;
     }
+    #credit {
+      position: fixed;
+      top: 28px;
+      left: 32px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 400ms ease;
+      max-width: calc(100vw - 64px);
+    }
+    #credit.is-visible,
+    .credit.is-visible { opacity: 1; }
+    #credit .credit-avatar {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    #credit .credit-avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+    #credit .credit-avatar.has-image .credit-avatar-img { display: block; }
+    #credit .credit-avatar.has-image .credit-avatar-fallback { display: none; }
+    #credit .credit-avatar-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: #f4f1ea;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    }
+    #credit .credit-rule {
+      width: 1px;
+      height: 36px;
+      flex: 0 0 1px;
+      background: rgba(255, 255, 255, 0.28);
+    }
+    #credit .credit-text { min-width: 0; }
+    #credit .credit-author {
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      opacity: 0.72;
+      color: #f4f1ea;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 18px rgba(0, 0, 0, 0.45);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: min(36vw, 420px);
+    }
+    #credit .credit-title {
+      margin-top: 2px;
+      font-size: 16px;
+      font-weight: 600;
+      opacity: 0.95;
+      color: #f4f1ea;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 18px rgba(0, 0, 0, 0.45);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: min(36vw, 420px);
+    }
   </style>
 </head>
 <body>
   <div id="stage"></div>
   <div id="status"></div>
+  <div id="credit" class="credit" aria-hidden="true">
+    <div class="credit-avatar">
+      <img class="credit-avatar-img" alt="" />
+      <span class="credit-avatar-fallback"></span>
+    </div>
+    <div class="credit-rule"></div>
+    <div class="credit-text">
+      <div class="credit-author"></div>
+      <div class="credit-title"></div>
+    </div>
+  </div>
   <script src="config.js"></script>
   <script src="main.js"></script>
 </body>
@@ -224,6 +320,12 @@ export const MAIN_JS = String.raw`(() => {
 
   const stage = document.getElementById('stage');
   const statusEl = document.getElementById('status');
+  const creditEl = document.getElementById('credit');
+  const creditAvatarEl = creditEl && creditEl.querySelector('.credit-avatar');
+  const creditImgEl = creditEl && creditEl.querySelector('.credit-avatar-img');
+  const creditFallbackEl = creditEl && creditEl.querySelector('.credit-avatar-fallback');
+  const creditAuthorEl = creditEl && creditEl.querySelector('.credit-author');
+  const creditTitleEl = creditEl && creditEl.querySelector('.credit-title');
 
   const state = {
     pool: 'all',
@@ -251,10 +353,92 @@ export const MAIN_JS = String.raw`(() => {
     skipToken: 0,
     /** Pending sleep completer — must be called when skipping or await hangs forever. */
     sleepDone: null,
+    infoOverlay: 'always',
+    creditFadeTimer: null,
   };
 
   function setStatus(msg) {
     if (statusEl) statusEl.textContent = msg || '';
+  }
+
+  function creditInitial(author) {
+    const s = String(author || '').trim();
+    return s ? s.charAt(0) : '?';
+  }
+
+  function clearCreditFadeTimer() {
+    if (state.creditFadeTimer) {
+      clearTimeout(state.creditFadeTimer);
+      state.creditFadeTimer = null;
+    }
+  }
+
+  function setCreditVisible(on) {
+    if (!creditEl) return;
+    if (on) {
+      creditEl.classList.add('is-visible');
+      creditEl.setAttribute('aria-hidden', 'false');
+    } else {
+      creditEl.classList.remove('is-visible');
+      creditEl.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function applyCreditVisibility(galleryChanged) {
+    const mode = state.infoOverlay || 'always';
+    clearCreditFadeTimer();
+    if (mode === 'hidden') {
+      setCreditVisible(false);
+      return;
+    }
+    if (mode === 'always') {
+      setCreditVisible(true);
+      return;
+    }
+    if (galleryChanged) {
+      setCreditVisible(true);
+      state.creditFadeTimer = setTimeout(function () {
+        state.creditFadeTimer = null;
+        if (state.infoOverlay === 'fade') setCreditVisible(false);
+      }, 4000);
+    }
+  }
+
+  function updateCredit(g, galleryChanged) {
+    if (!creditEl || !creditAuthorEl || !creditTitleEl) return;
+    const changed = galleryChanged !== false;
+    const authorRaw = g && g.author != null ? String(g.author) : '';
+    const author = authorRaw.trim() || '未知作者';
+    const title = (g && (g.title || g.id)) || '';
+    creditAuthorEl.textContent = author;
+    creditTitleEl.textContent = title;
+
+    const mode = state.infoOverlay || 'always';
+    const avatarPath = g && g.avatar ? String(g.avatar).trim() : '';
+
+    function showFallback() {
+      if (creditImgEl) {
+        creditImgEl.removeAttribute('src');
+        creditImgEl.onload = null;
+        creditImgEl.onerror = null;
+      }
+      if (creditAvatarEl) creditAvatarEl.classList.remove('has-image');
+      if (creditFallbackEl) creditFallbackEl.textContent = creditInitial(authorRaw.trim() ? authorRaw : '');
+    }
+
+    if (mode === 'hidden' || !avatarPath) {
+      showFallback();
+    } else if (creditImgEl && creditAvatarEl) {
+      creditImgEl.onload = function () {
+        creditAvatarEl.classList.add('has-image');
+      };
+      creditImgEl.onerror = function () {
+        showFallback();
+      };
+      creditImgEl.src = pathToUrl(avatarPath);
+    }
+
+    applyCreditVisibility(changed);
   }
 
   function skipCurrentGallery() {
@@ -787,6 +971,8 @@ export const MAIN_JS = String.raw`(() => {
         } else {
           setStatus('播放池为空：下载套图，或检查媒体服务');
         }
+        setCreditVisible(false);
+        clearCreditFadeTimer();
         const ok = await sleep(4000);
         if (!ok || token !== state.skipToken) continue;
         state.forcePlaylist = true;
@@ -803,6 +989,7 @@ export const MAIN_JS = String.raw`(() => {
       state.lastGalleryId = g.id;
       state.cursor = 0;
       setStatus('[' + poolLabel(state.pool) + '] ' + (g.title || g.id));
+      updateCredit(g, true);
 
       let shown = 0;
       let aborted = false;
@@ -884,6 +1071,12 @@ export const MAIN_JS = String.raw`(() => {
       if (properties.cutduration && properties.cutduration.value !== undefined) {
         state.cutMs = Math.round(Math.max(0.3, Number(properties.cutduration.value) || 1) * 1000);
         applyCutVars();
+      }
+      if (properties.infooverlay && properties.infooverlay.value !== undefined && properties.infooverlay.value !== null) {
+        const v = String(properties.infooverlay.value);
+        state.infoOverlay = (v === 'fade' || v === 'hidden' || v === 'always') ? v : 'always';
+        if (state.gallery) updateCredit(state.gallery, true);
+        else if (state.infoOverlay === 'hidden') setCreditVisible(false);
       }
       clampInterval();
     },
